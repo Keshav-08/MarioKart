@@ -1,15 +1,16 @@
 import { Flag, Gauge, Zap } from 'lucide-react';
 import { formatTime } from '@apex/shared';
-import { course, district } from '../game/course';
+import { COURSES, type CourseId } from '../game/course';
 import { ITEMS } from '../game/race';
 import type { Telemetry } from './GameCanvas';
-const mapPoints = course.getSpacedPoints(150).map(p => `${(p.x + 125) * .7},${(p.z + 95) * .7}`).join(' ');
-export default function HUD({ telemetry }: { telemetry: Telemetry | null }) {
+export default function HUD({ telemetry, courseId }: { telemetry: Telemetry | null; courseId: CourseId }) {
+  const track = COURSES[courseId], { course, district } = track;
+  const mapPoints = course.getSpacedPoints(150).map(p => `${(p.x + 125) * .7},${(p.z + 95) * .7}`).join(' ');
   const racing = telemetry && ['racing', 'finished'].includes(telemetry.phase);
   const item = telemetry?.item ? ITEMS[telemetry.item] : null;
   return <div data-motion={telemetry?.motion} className={`hud prix-hud ${racing ? 'is-racing' : ''}`}>
-    <div className="hud-top"><div className="hud-chip"><span className="live-dot" />{racing ? district(telemetry.progress) : 'CLOUDBURST CAUSEWAY'}</div><div className="hud-chip weather">SUNSET CUP · 150 CC</div></div>
-    {!racing && telemetry?.phase !== 'countdown' && <div className="preview-label"><span>A NEW HORIZON. A NEW RIVALRY.</span><strong>Clouds above.<br />Chaos ahead.</strong><p>Seven rivals. Four power-ups. One way to the podium.</p></div>}
+    <div className="hud-top"><div className="hud-chip"><span className="live-dot" />{racing ? district(telemetry.progress) : track.name.toUpperCase()}</div><div className="hud-chip weather">APEX TOUR · 150 CC</div></div>
+    {!racing && telemetry?.phase !== 'countdown' && <div className="preview-label"><span>A NEW HORIZON. A NEW RIVALRY.</span><strong>{track.name}</strong><p>{track.subtitle}</p></div>}
     {racing && <>
       <div className="position-badge"><strong>{telemetry.position}</strong><span>{['', 'ST', 'ND', 'RD'][telemetry.position] || 'TH'}<small>/ 8 RACERS</small></span></div>
       <div className="race-timer"><span><Flag size={13} /> LAP {telemetry.lap} / 3</span><strong>{formatTime(telemetry.lapTime * 1000)}</strong><small>RACE {formatTime(telemetry.time * 1000)}</small></div>
@@ -21,6 +22,6 @@ export default function HUD({ telemetry }: { telemetry: Telemetry | null }) {
       {telemetry.message && <div className={`race-message ${telemetry.stun > 0 ? 'hit-message' : ''}`}>{telemetry.message}</div>}
     </>}
     {telemetry?.phase === 'countdown' && <div className="countdown"><span>THE GRID IS SET. MAKE YOUR MOVE.</span><strong key={telemetry.countdown}>{telemetry.countdown}</strong><small>HOLD W / ↑ TO ACCELERATE</small></div>}
-    <div className="track-caption"><span><i /> SUNSET HARBOR → SKYBRIDGE → CRYSTAL CANYON</span><span>3 LAPS / 8 RACERS</span></div>
+    <div className="track-caption"><span><i /> {track.sectors.slice(0, 3).join(' → ')}</span><span>3 LAPS / 8 RACERS</span></div>
   </div>;
 }

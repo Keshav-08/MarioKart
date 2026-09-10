@@ -1,35 +1,50 @@
 import * as THREE from 'three';
-
-export const COURSE_NAME = 'Cloudburst Causeway';
-export const ROAD_WIDTH = 15;
-export const CHECKPOINTS = 16;
-export const TOTAL_LAPS = 3;
-// A hand-shaped loop: harbor straight, ascending switchbacks, sky bridge,
-// observatory hairpin, canyon descent and a sweeping seaside return.
-const points = [
+export type CourseId = 'cloudburst' | 'neon' | 'foundry';
+export interface CourseSpec {
+  id: CourseId; name: string; subtitle: string; difficulty: string; color: string;
+  points: number[][]; width: number; items: number[]; boosts: number[]; jumps: number[];
+  pace: number; cornering: number; laneScale: number; racingLine: [number, number][]; sectors: string[];
+}
+export const CHECKPOINTS = 16, TOTAL_LAPS = 3;
+export const wrap = (p: number) => ((p % 1) + 1) % 1;
+export const courseSpecs: CourseSpec[] = [
+  { id: 'cloudburst', name: 'Cloudburst Causeway', subtitle: 'Harbor streets. Sky bridges. Crystal canyons.', difficulty: 'Balanced · 2 / 5', color: '#a49add', width: 15,
+    points: [
   [0, 3, -65], [45, 3, -65], [78, 6, -48], [95, 12, -12],
   [72, 19, 15], [39, 22, 0], [18, 25, 29], [46, 27, 55],
   [83, 23, 72], [76, 15, 108], [30, 9, 119], [-6, 7, 88],
   [-35, 12, 110], [-76, 18, 95], [-100, 15, 51], [-74, 9, 19],
   [-105, 5, -12], [-84, 3, -53], [-43, 3, -65],
-].map(p => new THREE.Vector3(...p as [number, number, number]));
-export const course = new THREE.CatmullRomCurve3(points, true, 'centripetal');
-export const courseLength = course.getLength();
+], items: [.07,.23,.39,.64,.79,.92], boosts: [.19,.34,.73,.88], jumps: [.34], pace: 0, cornering: 24, laneScale: 1, racingLine: [[0,0],[.2,1],[.27,-1],[.34,0],[.45,1],[.64,-1],[.83,0],[1,0]],
+    sectors: ['SUNSET HARBOR','SKYBRIDGE SUMMIT','OBSERVATORY BEND','CRYSTAL CANYON','PALM COAST'] },
+  { id: 'neon', name: 'Neon Night Market', subtitle: 'Lantern alleys. Rooftop signs. Midnight rivalry.', difficulty: 'Technical · 4 / 5', color: '#f069d4', width: 14,
+    points: [[0,3,-80],[55,3,-80],[84,3,-60],[84,3,-20],[56,3,4],[23,3,-10],[-5,3,8],[12,3,36],[58,3,37],[85,3,65],[65,3,98],[15,3,100],[-20,3,73],[-57,3,89],[-91,3,62],[-88,3,18],[-56,3,-7],[-81,3,-42],[-62,3,-77],[-25,3,-80]],
+    items: [.06,.21,.38,.57,.74,.92], boosts: [.10,.46,.66,.94], jumps: [], pace: -3, cornering: 28, laneScale: .65, racingLine: [[0,0],[.12,1],[.19,-1.3],[.26,.6],[.34,-.8],[.46,0],[.58,1],[.65,-1],[.76,.8],[.88,-1],[1,0]],
+    sectors: ['LANTERN MILE','NOODLE ALLEY','MIDNIGHT PLAZA','ARCADE ROW','AFTER HOURS'] },
+  { id: 'foundry', name: 'Stormwater Foundry', subtitle: 'Canal straights. Turbine bends. The spillway rush.', difficulty: 'Fast · 3 / 5', color: '#58c9d6', width: 17,
+    points: [[0,7,-85],[60,7,-85],[102,12,-58],[110,18,-5],[88,20,41],[51,15,71],[65,12,113],[24,9,139],[-29,7,125],[-55,9,85],[-91,14,64],[-116,19,21],[-105,16,-31],[-64,10,-74],[-25,7,-85]],
+    items: [.05,.22,.42,.59,.78,.93], boosts: [.10,.30,.52,.83], jumps: [.30], pace: 2, cornering: 24, laneScale: .9, racingLine: [[0,0],[.17,1.4],[.24,-1.2],[.30,0],[.43,1],[.55,-1],[.7,.8],[.84,-1],[1,0]],
+    sectors: ['THE DOCKS','TURBINE RUN','SPILLWAY','COOLING CANAL','FURNACE STRAIGHT'] },
+];
+function createCourse(spec: CourseSpec) {
+  const ROAD_WIDTH = spec.width;
+const course = new THREE.CatmullRomCurve3(spec.points.map(p => new THREE.Vector3(...p as [number, number, number])), true, 'centripetal');
+const courseLength = course.getLength();
 const samples = course.getSpacedPoints(720);
-export const shortcutStart = 0.49, shortcutEnd = 0.60;
-export const shortcut = new THREE.CatmullRomCurve3([
+const shortcutStart = .49, shortcutEnd = .60;
+const shortcut = new THREE.CatmullRomCurve3([
   course.getPointAt(shortcutStart), new THREE.Vector3(16, 10.5, 116),
   new THREE.Vector3(-8, 11, 112), course.getPointAt(shortcutEnd),
 ]);
 const shortSamples = shortcut.getSpacedPoints(90);
-export const wrap = (p: number) => ((p % 1) + 1) % 1;
-export function pointAt(p: number, lane = 0) {
+
+function pointAt(p: number, lane = 0) {
   const point = course.getPointAt(wrap(p));
   const tangent = course.getTangentAt(wrap(p));
   return point.add(new THREE.Vector3(tangent.z, 0, -tangent.x).normalize().multiplyScalar(lane));
 }
-export function yawAt(p: number) { const t = course.getTangentAt(wrap(p)); return Math.atan2(t.x, t.z); }
-export interface RoadPoint { progress: number; point: THREE.Vector3; distance: number; shortcut: boolean; tangent: THREE.Vector3 }
+function yawAt(p: number) { const t = course.getTangentAt(wrap(p)); return Math.atan2(t.x, t.z); }
+interface RoadPoint { progress: number; point: THREE.Vector3; distance: number; shortcut: boolean; tangent: THREE.Vector3 }
 function projectRoad(position: THREE.Vector3, allowShortcut: boolean, heights?: [number, number]): RoadPoint | null {
   let best = Infinity, index = 0, fraction = 0, short = false;
   const inspect = (list: THREE.Vector3[], alternate: boolean) => {
@@ -42,19 +57,32 @@ function projectRoad(position: THREE.Vector3, allowShortcut: boolean, heights?: 
       if (distance < best) { best = distance; index = i; fraction = f; short = alternate; }
     }
   };
-  inspect(samples, false); if (allowShortcut) inspect(shortSamples, true);
+  inspect(samples, false); if (allowShortcut) inspect(spec.id === 'cloudburst' ? shortSamples : [], true);
   if (!Number.isFinite(best)) return null;
   const list = short ? shortSamples : samples;
   const p = (index + fraction) / (list.length - 1);
   return { progress: short ? shortcutStart + p * (shortcutEnd - shortcutStart) : wrap(p), point: list[index].clone().lerp(list[index + 1], fraction), distance: Math.sqrt(best), shortcut: short, tangent: list[index + 1].clone().sub(list[index]).normalize() };
 }
 // Support requires both a road beneath the kart and a compatible surface height.
-export function roadSupport(position: THREE.Vector3, minHeight: number, maxHeight: number) {
+function roadSupport(position: THREE.Vector3, minHeight: number, maxHeight: number) {
   return projectRoad(position, true, [minHeight, maxHeight]);
 }
-export function nearestRoad(position: THREE.Vector3, allowShortcut = true): RoadPoint {
+function nearestRoad(position: THREE.Vector3, allowShortcut = true): RoadPoint {
   return projectRoad(position, allowShortcut)!;
 }
-export const itemLocations = [0.07, 0.23, 0.39, 0.64, 0.79, 0.92].flatMap(p => [-4, 0, 4].map(lane => ({ progress: p, position: pointAt(p, lane) })));
-export const boostLocations = [0.19, 0.34, 0.73, 0.88];
-export const district = (p: number) => p < .18 ? 'SUNSET HARBOR' : p < .43 ? 'SKYBRIDGE SUMMIT' : p < .64 ? 'OBSERVATORY BEND' : p < .84 ? 'CRYSTAL CANYON' : 'PALM COAST';
+  const racingLane = (progress: number) => {
+    const p = wrap(progress), line = spec.racingLine;
+    const index = Math.max(0, line.findIndex((anchor, i) => i < line.length - 1 && p >= anchor[0] && p <= line[i+1][0]));
+    const [a,b] = [line[index],line[index+1]];
+    return THREE.MathUtils.lerp(a[1], b[1], (p-a[0])/(b[0]-a[0]));
+  };
+  const itemLocations = spec.items.flatMap(p => [-spec.width * .27, 0, spec.width * .27].map(lane => ({progress: p, position: pointAt(p, lane)})));
+  const district = (p: number) => spec.sectors[Math.min(4, Math.floor(wrap(p) * 5))];
+  return { ...spec, racingLane, course, courseLength, ROAD_WIDTH, pointAt, yawAt, nearestRoad, roadSupport, itemLocations, boostLocations: spec.boosts, shortcut, shortcutStart, shortcutEnd, hasShortcut: spec.id === 'cloudburst', district };
+}
+export type RaceCourse = ReturnType<typeof createCourse>;
+export const COURSES = Object.fromEntries(courseSpecs.map(spec => [spec.id, createCourse(spec)])) as Record<CourseId, RaceCourse>;
+export const CUP_TRACKS: CourseId[] = ['cloudburst','neon','foundry'];
+// Compatibility exports for the original course and existing tests.
+export const { course, courseLength, ROAD_WIDTH, pointAt, yawAt, nearestRoad, roadSupport, itemLocations, boostLocations, shortcut, shortcutStart, shortcutEnd, district } = COURSES.cloudburst;
+export const COURSE_NAME = COURSES.cloudburst.name;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { boostLocations, CHECKPOINTS, course, courseLength, itemLocations, nearestRoad, roadSupport, pointAt, ROAD_WIDTH, shortcut, shortcutEnd, shortcutStart, TOTAL_LAPS, wrap, yawAt } from './course';
+import { CHECKPOINTS, TOTAL_LAPS, wrap, COURSES, type RaceCourse } from './course';
 
 export type Item = 'turbo' | 'rocket' | 'shield' | 'trap';
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -43,14 +43,16 @@ export class Race {
   world = new CANNON.World({ gravity: new CANNON.Vec3(0, 0, 0) });
   racers: Racer[] = [];
   projectiles: Projectile[] = [];
-  boxes = itemLocations.map(location => ({ ...location, cooldown: 0 }));
+  boxes: { progress: number; position: THREE.Vector3; cooldown: number }[];
   events: RaceEvent[] = [];
   time = 0;
   started = false;
   complete = false;
   private serial = 0;
   private seed = 9137;
-  constructor(public difficulty: Difficulty, name: string, color: string) {
+  constructor(public difficulty: Difficulty, name: string, color: string, public track: RaceCourse = COURSES.cloudburst) {
+    const { pointAt, yawAt, courseLength } = track;
+    this.boxes = track.itemLocations.map(location => ({ ...location, cooldown: 0 }));
     this.world.defaultContactMaterial.friction = 0;
     this.world.defaultContactMaterial.restitution = .45;
     const profiles = [{ name, color }, ...BOT_PROFILES];
@@ -92,6 +94,7 @@ export class Race {
     this.events.push({ type: 'hit', position: vector(racer), color: '#ffa17d', text: racer.id === 0 ? 'HIT! Get back on the throttle' : undefined });
   }
   recover(racer: Racer) {
+    const { pointAt } = this.track;
     if (racer.motion === 'rescuing') return;
     const progress = racer.gate < 0 ? -.003 : racer.gate / CHECKPOINTS + .002;
     racer.rescueFrom.copy(vector(racer)); racer.rescueTo.copy(pointAt(progress, clamp(racer.lane, -3, 3))).y += 1;
@@ -101,6 +104,7 @@ export class Race {
     this.events.push({ type: 'recover', position: vector(racer), color: '#acf4ff', text: racer.id === 0 ? 'RESCUE • RETURNING TO TRACK' : undefined });
   }
   private rescueStep(racer: Racer, dt: number) {
+    const { yawAt } = this.track;
     racer.rescueTime += dt;
     const returnProgress = racer.gate < 0 ? -.003 : racer.gate / CHECKPOINTS + .002;
     racer.yaw += angle(yawAt(returnProgress) - racer.yaw) * (1 - Math.exp(-6 * dt));
@@ -116,21 +120,23 @@ export class Race {
     }
   }
   private ai(racer: Racer): DriveInput {
+    const { pointAt, yawAt, courseLength, shortcut, shortcutStart, shortcutEnd } = this.track;
     const p = wrap(racer.progress);
     const neighbors = this.racers.filter(r => r.id !== racer.id && r.progress > racer.progress && (r.progress - racer.progress) * courseLength < 13);
-    const preferred = neighbors.length ? (neighbors[0].lane > 0 ? -3.5 : 3.5) : Math.sin(this.time * .35 + racer.id * 2.1) * 2.7;
+    const preferred = neighbors.length ? (neighbors[0].lane > 0 ? -3.5 : 3.5) : this.track.racingLane(p) + Math.sin(this.time * .35 + racer.id * 2.1) * 1.5 * this.track.laneScale;
     racer.lane += (preferred - racer.lane) * .035;
-    if (p > shortcutStart - .012 && p < shortcutStart && racer.boost > 0) racer.shortRoute = true;
+    if (this.track.hasShortcut && p > shortcutStart - .012 && p < shortcutStart && racer.boost > 0) racer.shortRoute = true;
     if (p > shortcutEnd + .008 || p < shortcutStart - .02) racer.shortRoute = false;
     const target = racer.shortRoute ? shortcut.getPointAt(clamp((p - shortcutStart) / (shortcutEnd - shortcutStart) + .13, 0, 1)) : pointAt(p + Math.max(7, racer.speed * .32) / courseLength, racer.lane);
     const error = angle(Math.atan2(target.x - racer.body.position.x, target.z - racer.body.position.z) - racer.yaw);
     const bend = Math.abs(angle(yawAt(p + 18 / courseLength) - yawAt(p)));
-    const level = { easy: 29, normal: 34, hard: 39 }[this.difficulty];
-    const targetSpeed = p > .315 && p < .37 ? 24 : Math.max(14, level - bend * 24) + (racer.boost > 0 ? 10 * Math.max(0, 1 - bend * 2) : 0);
+    const level = { easy: 29, normal: 34, hard: 39 }[this.difficulty] + this.track.pace;
+    const targetSpeed = this.track.jumps.some(j => p > j - .025 && p < j + .03) ? 24 : Math.max(14, level - bend * this.track.cornering) + (racer.boost > 0 ? 10 * Math.max(0, 1 - bend * 2) : 0);
     const useItem = !!racer.item && racer.itemAge > 1.5 + racer.id * .24 && (racer.item !== 'turbo' || bend < .25) && (racer.item !== 'trap' || this.racers.some(r => r.id !== racer.id && racer.progress > r.progress && racer.progress - r.progress < .05));
     return { throttle: racer.speed > targetSpeed + 2 ? -.45 : 1, steer: clamp(error * 2.8, -1, 1), drift: bend > .34 && Math.abs(error) > .12 && racer.speed > 16, useItem };
   }
   step(dt: number, input: DriveInput) {
+    const { nearestRoad, roadSupport, ROAD_WIDTH, boostLocations } = this.track;
     if (!this.started || this.complete) return;
     this.time += dt;
     for (const box of this.boxes) box.cooldown = Math.max(0, box.cooldown - dt);
@@ -213,7 +219,7 @@ export class Race {
       if (racer.finish !== null) continue;
       for (const box of this.boxes) if (box.cooldown <= 0 && !racer.item && vector(racer).distanceTo(box.position.clone().add(new THREE.Vector3(0, 1, 0))) < 3.1) { this.award(racer); box.cooldown = 5; break; }
       if (racer.padCooldown <= 0 && boostLocations.some(p => Math.abs(wrap(racer.progress) - p) < .004) && road.distance < 5) {
-        racer.boost = Math.max(racer.boost, 1.4); racer.padCooldown = 2; if (Math.abs(wrap(racer.progress) - .34) < .008) { racer.motion = 'airborne'; racer.airTime = 0; racer.departureHeight = racer.body.position.y; racer.body.velocity.y = 12; }
+        racer.boost = Math.max(racer.boost, 1.4); racer.padCooldown = 2; if (this.track.jumps.some(j => Math.abs(wrap(racer.progress) - j) < .008)) { racer.motion = 'airborne'; racer.airTime = 0; racer.departureHeight = racer.body.position.y; racer.body.velocity.y = 12; }
         this.events.push({ type: 'boost', position: vector(racer), color: '#fff07c' });
       }
     }

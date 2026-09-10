@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { boostLocations, course, itemLocations, pointAt, ROAD_WIDTH, shortcut, yawAt } from './course';
+import { COURSES, type RaceCourse } from './course';
 
 const material = (color: string, glow = false) => new THREE.MeshStandardMaterial({ color, roughness: .78, ...(glow ? { emissive: color, emissiveIntensity: .45 } : {}) });
 function mesh(scene: THREE.Object3D, geometry: THREE.BufferGeometry, color: string, x: number, y: number, z: number, glow = false) {
@@ -28,7 +28,7 @@ function road(scene: THREE.Object3D, curve: THREE.Curve<THREE.Vector3>, width: n
   }
   const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geometry.setIndex(indices); geometry.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: .85, side: THREE.DoubleSide });
-  const m = new THREE.Mesh(geometry, mat); m.receiveShadow = true; scene.add(m);
+  const m = new THREE.Mesh(geometry, mat); m.receiveShadow = true; scene.add(m); return m;
 }
 function batch(group: THREE.Group) {
   group.updateMatrixWorld(true);
@@ -47,31 +47,34 @@ function batch(group: THREE.Group) {
   }
 }
 
-export function buildRaceScene(scene: THREE.Scene) {
+export function buildRaceScene(scene: THREE.Scene, track: RaceCourse = COURSES.cloudburst) {
+  const { boostLocations, course, itemLocations, pointAt, ROAD_WIDTH, shortcut, yawAt } = track;
+  const night = track.id === 'neon', industrial = track.id === 'foundry';
   const sky = document.createElement('canvas'); sky.width = 4; sky.height = 512;
   const ctx = sky.getContext('2d')!, gradient = ctx.createLinearGradient(0, 0, 0, 512);
-  gradient.addColorStop(0, '#8daeea'); gradient.addColorStop(.48, '#f9b7aa'); gradient.addColorStop(1, '#ffe6b5'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, 4, 512);
+  gradient.addColorStop(0, night ? '#07091e' : industrial ? '#233b58' : '#8daeea'); gradient.addColorStop(.48, night ? '#22133e' : industrial ? '#729ca9' : '#f9b7aa'); gradient.addColorStop(1, night ? '#512d60' : industrial ? '#e4b780' : '#ffe6b5'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, 4, 512);
   const background = new THREE.CanvasTexture(sky); background.colorSpace = THREE.SRGBColorSpace; scene.background = background;
-  scene.fog = new THREE.Fog('#f7c7b4', 170, 480);
-  scene.add(new THREE.HemisphereLight('#fff1d5', '#6b68a9', 2));
-  const sun = new THREE.DirectionalLight('#ffddab', 2.5); sun.position.set(-70, 130, -80); sun.castShadow = true;
+  scene.fog = new THREE.Fog(night ? '#18172d' : industrial ? '#7899a6' : '#f7c7b4', 170, 480);
+  scene.add(new THREE.HemisphereLight(night ? '#a9baff' : '#fff1d5', '#6b68a9', 2));
+  const sun = new THREE.DirectionalLight(night ? '#b7c8ff' : '#ffddab', night ? 1.7 : 2.5); sun.position.set(-70, 130, -80); sun.castShadow = true;
   Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 1, far: 400 }); sun.shadow.mapSize.set(2048, 2048); sun.shadow.normalBias = .06; scene.add(sun);
   const staticWorld = new THREE.Group(); scene.add(staticWorld);
-  const sea = mesh(staticWorld, new THREE.PlaneGeometry(1600, 1600), '#6bbec8', 0, -22, 0); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
-  mesh(staticWorld, new THREE.CylinderGeometry(133, 92, 33, 13), '#858cb9', -3, -17, 27);
-  const island = mesh(staticWorld, new THREE.CylinderGeometry(131, 131, 1, 13), '#80bda8', -3, -.5, 27); island.receiveShadow = true;
+  const sea = mesh(staticWorld, new THREE.PlaneGeometry(1600, 1600), night ? '#14132b' : '#6bbec8', 0, -22, 0); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
+  mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 157 : 133, industrial ? 112 : 92, 33, 13), '#858cb9', -3, -17, 27);
+  const island = mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 155 : 131, industrial ? 155 : 131, 1, 13), night ? '#232436' : industrial ? '#607579' : '#80bda8', -3, -.5, 27); island.receiveShadow = true;
   // Shoulders are separate edge strips, so they cannot flicker through the asphalt on bends.
   road(staticWorld, course, ROAD_WIDTH + 1.8, '#e8bdcc', 520, ROAD_WIDTH);
-  road(staticWorld, course, ROAD_WIDTH, '#59627e', 520);
-  road(staticWorld, shortcut, 7, '#d6a06c', 80);
+  const asphalt = road(staticWorld, course, ROAD_WIDTH, night ? '#41496b' : industrial ? '#4b5964' : '#59627e', 520);
+  if (night) { asphalt.material.roughness = .28; asphalt.material.metalness = .2; }
+  if (track.hasShortcut) road(staticWorld, shortcut, 7, '#d6a06c', 80);
   for (let i = 0; i < 320; i++) {
     const p = i / 320, center = pointAt(p), next = pointAt((i + 1) / 320), yaw = yawAt(p);
     const len = center.distanceTo(next) + .12;
     for (const side of [-1, 1]) {
       const edge = pointAt(p, side * (ROAD_WIDTH / 2 + .3));
       const curb = box(staticWorld, edge.x, edge.y + .11, edge.z, .65, .22, len, i % 2 ? '#fff1d5' : '#f193a4'); curb.rotation.y = yaw;
-      if (p > .45 && p < .62) continue;
-      const rail = box(staticWorld, edge.x, edge.y + .6, edge.z, .23, .55, len, p < .43 ? '#73d4cf' : '#ada1e8'); rail.rotation.y = yaw;
+      if (track.hasShortcut && p > .45 && p < .62) continue;
+      const rail = box(staticWorld, edge.x, edge.y + .6, edge.z, .23, .55, len, night ? (i % 2 ? '#ec67d9' : '#48e6ec') : p < .43 ? '#73d4cf' : '#ada1e8'); rail.rotation.y = yaw;
     }
     if (i % 5 === 0) {
       const line = box(staticWorld, center.x, center.y + .075, center.z, .15, .02, 2, '#d2c7cf');
@@ -92,12 +95,13 @@ export function buildRaceScene(scene: THREE.Scene) {
   const gate = new THREE.Group(); const start = pointAt(0); gate.position.copy(start); gate.rotation.y = yawAt(0); staticWorld.add(gate);
   for (const x of [-9, 9]) { box(gate, x, 4.5, 0, .8, 9, .8, '#f6d49f'); box(gate, x, .5, 0, 2, 1, 2, '#798bd0'); }
   box(gate, 0, 8.4, 0, 19, 2.2, 1, '#454b87');
-  sign(gate, 'CLOUDBURST CUP', new THREE.Vector3(0, 8.4, -.52), Math.PI, 17);
+  sign(gate, night ? 'NIGHT MARKET' : industrial ? 'STORMWATER' : 'CLOUDBURST CUP', new THREE.Vector3(0, 8.4, -.52), Math.PI, 17);
   for (let i = 0; i < 16; i++) for (let j = 0; j < 3; j++) box(gate, i - 7.5, .1, j - 1, 1, .05, 1, (i + j) % 2 ? '#fff3d6' : '#3c4967');
   for (let i = 0; i < 8; i++) {
     const p = pointAt(-(Math.floor(i / 2) * 4.8 + 5) / course.getLength(), i % 2 ? -2.4 : 2.4);
     const grid = box(staticWorld, p.x, p.y + .08, p.z, 2.8, .03, 3.1, '#b9b1b2'); grid.rotation.y = yawAt(0);
   }
+  if (track.id === 'cloudburst') {
   // Harbor village: colorful pitched roofs, balconies, bunting and a lighthouse.
   for (let i = 0; i < 7; i++) {
     const x = -48 + i * 15, z = -88, h = 5 + i % 3;
@@ -142,6 +146,7 @@ export function buildRaceScene(scene: THREE.Scene) {
     const p = pointAt(i / 16, 12); box(staticWorld, p.x, p.y + 3, p.z, .2, 6, .2, '#fff0c6');
     const flag = box(staticWorld, p.x + .9, p.y + 5, p.z, 1.8, 1, .1, i % 2 ? '#ffbb72' : '#c8a0e3'); flag.rotation.y = i;
   }
+  } else buildDistrict(staticWorld, scene, track);
   batch(staticWorld);
   const itemCanvas = document.createElement('canvas'); itemCanvas.width = 128; itemCanvas.height = 128;
   const itemContext = itemCanvas.getContext('2d')!;
@@ -156,12 +161,74 @@ export function buildRaceScene(scene: THREE.Scene) {
     group.userData.index = i; scene.add(group); return group;
   });
   const balloons: THREE.Group[] = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < (track.id === 'cloudburst' ? 6 : 0); i++) {
     const group = new THREE.Group(); group.position.set(-120 + i * 48, 48 + i % 3 * 14, -90 + i % 2 * 210);
     const canopy = mesh(group, new THREE.SphereGeometry(5, 12, 10), ['#f29eb0', '#f1cb84', '#969ee2'][i % 3], 0, 0, 0); canopy.scale.y = 1.2;
     box(group, 0, -8, 0, 2.3, 1.7, 2.3, '#9b7e79');
     for (const x of [-1, 1]) box(group, x, -5.7, 0, .06, 4, .06, '#f7e3bf');
     scene.add(group); balloons.push(group);
   }
-  return { boxes, balloons, background };
+  const rainGeometry = new THREE.BufferGeometry();
+  const drops = new Float32Array(night ? 1800 : 0);
+  for (let i = 0; i < drops.length; i += 3) { drops[i] = Math.sin(i * 73.13) * 140; drops[i+1] = (i % 90) + 5; drops[i+2] = Math.cos(i * 91.7) * 140; }
+  rainGeometry.setAttribute('position', new THREE.BufferAttribute(drops, 3));
+  const rain = new THREE.Points(rainGeometry, new THREE.PointsMaterial({ color: '#b7b9f1', size: .18, transparent: true, opacity: .55 })); scene.add(rain);
+  return { boxes, balloons, background, update: (dt: number) => {
+    for (let i = 1; i < drops.length; i += 3) { drops[i] -= dt * 24; if (drops[i] < 0) drops[i] = 85; }
+    rainGeometry.attributes.position.needsUpdate = true;
+  } };
+}
+
+function buildDistrict(world: THREE.Group, scene: THREE.Scene, track: RaceCourse) {
+  const night = track.id === 'neon';
+  // Keep every building off all road sections, including the inside of switchbacks.
+  for (let i = 0; i < 60; i++) {
+    const p = i / 60, side = i % 2 ? -1 : 1, at = track.pointAt(p, side * (track.width / 2 + 11));
+    if (track.nearestRoad(at, false).distance < track.width / 2 + 9) continue;
+    const h = night ? 14 + i % 5 * 6 : 12 + i % 4 * 5;
+    const building = box(world, at.x, h / 2, at.z, 11, h, 11, night ? ['#3b4968','#504363','#385c6a'][i%3] : '#596d78');
+    const frontage = new THREE.Group(); frontage.position.set(at.x, track.pointAt(p).y, at.z); frontage.rotation.y = track.yawAt(p) + (side > 0 ? -Math.PI / 2 : Math.PI / 2); world.add(frontage); building.rotation.y = frontage.rotation.y;
+    if (night) {
+      for (let y = 7; y < h - 2; y += 4) for (const x of [-3,0,3]) box(frontage, x, y, 5.55, 1.3, 2, .1, (i + y) % 3 ? '#67bac9' : '#f5b769');
+      box(frontage, 0, 3.4, 6.5, 10, .4, 4, i%2 ? '#ed5ba9' : '#46c9d7');
+      for (const x of [-4,4]) box(frontage, x, 1.6, 7.7, .18, 3.2, .18, '#ffc98a');
+      box(frontage, 0, 1.1, 6.5, 8, 2, 2, '#825174');
+      for (const x of [-2,0,2]) mesh(frontage, new THREE.SphereGeometry(.45,8,6), '#ffce84', x, 2.35, 7, true);
+      sign(frontage, ['MOON NOODLES','NIGHT ARCADE','MIDNIGHT TEA','ELECTRIC RAMEN','OPEN LATE'][i%5], new THREE.Vector3(0,5.6,5.6), 0, 10, i%2 ? '#801654' : '#0b637a');
+      box(frontage, -5, h * .6, 5.7, .25, h * .7, .25, '#fa57c2').material = material('#fa57c2', true);
+    } else {
+      for (const x of [-3,3]) {
+        mesh(frontage, new THREE.CylinderGeometry(1.2,1.2,10,10), '#c3a475', x, h/2, 6);
+        box(frontage, x, 4, 7, 2, 1, 2, '#efb54e');
+      }
+      sign(frontage, ['TURBINE 04','SPILLWAY →','POWER STATION'][i%3], new THREE.Vector3(0,6,5.6),0,10,'#27434c');
+    }
+  }
+  if (night) {
+    for (const p of [.03,.18,.34,.50,.68,.85]) {
+      const arch = new THREE.Group(); arch.position.copy(track.pointAt(p)); arch.rotation.y = track.yawAt(p); world.add(arch);
+      for (const x of [-9,9]) box(arch,x,5,0,.5,10,.5,'#9c4c79');
+      box(arch,0,9.5,0,19,.4,.4,'#eb76c8');
+      for (const x of [-6,-3,0,3,6]) { box(arch,x,8.4,0,.06,2,.06,'#ddaf79'); mesh(arch,new THREE.SphereGeometry(.7,10,8),'#ff927a',x,7.6,0,true); }
+      const light = new THREE.PointLight('#ee63d5',35,24,2); light.position.copy(track.pointAt(p)).y += 7; scene.add(light);
+      // Painted neon reflections give the rainy streets a stylized sheen.
+      for (const x of [-4,4]) box(arch,x,.035,0,1.3,.015,6,x<0?'#635275':'#39677c');
+    }
+    for (let i=0;i<8;i++) {
+      const at=track.pointAt(.37+i*.008,-10); box(world,at.x,at.y+7,at.z,.22,14,.22,'#7193af');
+      sign(world,'★ NIGHT MARKET ★',at.add(new THREE.Vector3(0,12,0)),track.yawAt(.4)+Math.PI,14,'#721764');
+    }
+  } else {
+    const hub = new THREE.Group(); hub.position.set(0,18,25); world.add(hub);
+    mesh(hub,new THREE.TorusGeometry(19,2,10,40),'#acc6cb',0,10,0);
+    for (let i=0;i<8;i++) { const blade=box(hub,0,10,0,3,34,1,'#779da8'); blade.rotation.z=i*Math.PI/4; }
+    for (const p of [.30,.52]) {
+      const at=track.pointAt(p), bridge=new THREE.Group(); bridge.position.copy(at); bridge.rotation.y=track.yawAt(p); world.add(bridge);
+      for (const x of [-12,12]) box(bridge,x,8,0,3,16,7,'#68868e');
+      box(bridge,0,16,0,27,3,7,'#98b6ba');
+      for (const x of [-10,10]) mesh(bridge,new THREE.BoxGeometry(2,26,5),'#6ce0ea',x,1,0,true);
+      sign(bridge,p===.30?'SPILLWAY EXPRESS':'COOLING CANAL',new THREE.Vector3(0,15,-3.6),Math.PI,20,'#285669');
+    }
+    for (let i=0;i<12;i++) { const at=track.pointAt(i/12,14); mesh(world,new THREE.CylinderGeometry(2,3,12,10),'#d19b63',at.x,6,at.z); }
+  }
 }

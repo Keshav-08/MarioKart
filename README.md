@@ -1,6 +1,6 @@
-# Apex Kart Club — Cloudburst Cup
+# Apex Kart Club — Apex Tour
 
-A single-player 3D kart racing game: **you against seven bots**, racing three laps of an original, elevated island circuit. The current game runs entirely in the browser. It does not need a lobby, an account, or a running backend.
+A single-player 3D kart racing game: **you against seven bots**, racing three laps on one of three original circuits or competing in a three-race championship. The current game runs entirely in the browser. It does not need a lobby, an account, or a running backend.
 
 ## Run the game
 
@@ -28,6 +28,24 @@ npm start
 ```
 
 Production runs at **http://localhost:3001**. To inspect the frontend production build separately, use `npm run preview -w client` after building.
+
+## Track selection and championship
+
+Choose a course card to see its layout preview, length, layout difficulty, and full 3D scene. The course difficulty indicator describes the road; Cruise / Sport / Expert separately controls opponent pace.
+
+| Course | Character | Layout difficulty |
+| --- | --- | --- |
+| Cloudburst Causeway | Elevated harbor, observatory shortcut, crystal canyon | Balanced · 2/5 |
+| Neon Night Market | Tight street bends, food stalls, neon storefronts, lantern arches, rain | Technical · 4/5 |
+| Stormwater Foundry | Wider industrial roads, turbine landmark, spillway structures, jump | Fast · 3/5 |
+
+**Single race** runs the selected course. **Three-race championship** always runs Cloudburst → Neon → Foundry with the same eight racers and chosen AI difficulty. Finishing places earn **15, 12, 10, 8, 6, 4, 2, 1** points; DNFs score zero. The round settles when everyone finishes or 40 seconds after the player finishes. The results screen shows cumulative standings and unlocks the next race. After Foundry it announces the champion. Ties use wins, then last-round placing, then racer ID for deterministic ordering.
+
+Championship progress lasts for the current session; returning to the paddock or reloading abandons the cup. Completed individual race records remain saved. A course cannot be scored twice, and rounds must be completed in order.
+
+Each layout owns its centerline, road width, item rows, boost/jump zones, racing-line anchors, corner-speed tuning, and overtaking lane spread. Neon keeps bots tighter through the market turns; Foundry allows a faster pace. The old Cloudburst shortcut and jump positions do not leak into other maps.
+
+**Records and ghosts are separate per course.** The My records dialog has a tab for each course. The ghost toggle always refers to the selected track. Existing Cloudburst records and ghosts retain their original storage keys and still load; new courses use `apex.neon.*.v1` and `apex.foundry.*.v1` keys. There is one personal-best ghost per course across all AI difficulties.
 
 ## What changed from the original scaffold
 
@@ -108,7 +126,7 @@ Touch devices show steering, throttle, brake, drift, and item buttons. The stage
 
 ## Personal records and ghosts
 
-The best ten completed race times are saved in `localStorage`, with name, difficulty, finish position, lap times, and date. A complete trajectory of the fastest race is saved as a translucent personal-best ghost. Finish a race to unlock the ghost toggle, then race it from the starting grid. Ghosts do not collide or use items.
+For each course, the best ten completed race times are saved in `localStorage`, with name, difficulty, finish position, lap times, and date. A complete trajectory of the fastest race on that course is saved as a translucent personal-best ghost. Finish a race to unlock the ghost toggle, then race it from the starting grid. Ghosts do not collide or use items.
 
 Records are local to the browser and origin, persist across server restarts, and disappear if browser storage is cleared. Difficulty is recorded beside each time; the overall fastest ghost may be from another difficulty. Invalid stored JSON is ignored. If browser storage is full or unavailable, the race still completes and a message explains why it was not saved.
 
@@ -137,12 +155,14 @@ MarioKart/
 │       ├── styles.css
 │       ├── components/
 │       │   ├── GameCanvas.tsx        # Renderer, fixed-step loop, animation and audio integration
+│       │   ├── TrackSelect.tsx       # Course cards, previews, difficulty indicators
 │       │   └── HUD.tsx               # Place, laps, inventory, minimap, speed and drift UI
 │       ├── hooks/
 │       │   ├── useKartControls.ts    # Keyboard/touch input; item and pause commands
 │       │   └── useMultiplayer.ts     # Retained legacy online hook; unused by the current game
 │       └── game/
-│           ├── course.ts             # Closed spline, elevation, shortcut and track projection
+│           ├── course.ts             # Three course definitions and per-course track projection
+│           ├── championship.ts       # Round points, order protection and cup tie-breaks
 │           ├── race.ts               # Bots, kart physics, item combat, checkpoints and placing
 │           ├── raceScene.ts          # Cloudburst scenery, road, landmarks and item meshes
 │           ├── audio.ts              # Gesture-unlocked procedural audio
@@ -169,7 +189,7 @@ npm test
 npm run build
 ```
 
-`npm test` runs the local gameplay tests and the existing backend suite. The gameplay tests cover course closure/elevation, shortcut length, actual item effects, shield consumption, stun behavior, recovery, checkpoint protection, item respawn, unsupported edge falls, height-aware support, descending landings, ballistic jumps, timed checkpoint-safe rescues, and a deterministic complete race with all eight racers using steering, combat and collisions. Tests need no browser or external services; the backend integration tests open temporary localhost ports.
+`npm test` runs the local gameplay tests and the existing backend suite. The gameplay tests cover course closure/elevation, shortcut length, actual item effects, shield consumption, stun behavior, recovery, checkpoint protection, item respawn, unsupported edge falls, height-aware support, descending landings, ballistic jumps, timed checkpoint-safe rescues, and deterministic complete races on all three layouts with all eight racers using steering, combat and collisions. Tour tests also verify championship scoring, duplicate-round protection, tie-breaks, course-isolated records/ghosts, and legacy Cloudburst saves. Tests need no browser or external services; the backend integration tests open temporary localhost ports.
 
 The frontend stack remains Vite, React, TypeScript, Three.js, Cannon-es and Tailwind CSS. Kart bodies have Cannon horizontal collisions. Grounded elevation follows a height-checked road surface; airborne motion integrates gravity, and jump pads add an upward impulse. Recovery follows a timed rescue arc. This is an arcade road-following physics model, not a wheel-suspension or flight simulator.
 

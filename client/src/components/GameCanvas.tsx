@@ -6,12 +6,12 @@ import { createKart, disposeObject } from '../game/scene';
 import { buildRaceScene } from '../game/raceScene';
 import { Race, type Difficulty, type RaceSnapshot } from '../game/race';
 import { RaceAudio } from '../game/audio';
-import { nearestRoad } from '../game/course';
+import { COURSES, type CourseId } from '../game/course';
 
 export interface GhostFrame { t: number; x: number; y: number; z: number; yaw: number }
 export interface Telemetry extends RaceSnapshot { phase: 'preview' | 'countdown' | 'racing' | 'finished'; countdown: number; message: string; paused: boolean }
 interface Props {
-  color: string; name: string; difficulty: Difficulty; raceKey: number; running: boolean; paused: boolean;
+  courseId: CourseId; color: string; name: string; difficulty: Difficulty; raceKey: number; running: boolean; paused: boolean;
   audio: RaceAudio; ghost: GhostFrame[]; onTelemetry: (state: Telemetry) => void;
   onFinish: (snapshot: RaceSnapshot, ghost: GhostFrame[]) => void; onReset: () => void; onPause: () => void;
 }
@@ -27,8 +27,9 @@ export default function GameCanvas(props: Props) {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
     host.current!.appendChild(renderer.domElement);
-    const scene = new THREE.Scene(), scenery = buildRaceScene(scene);
-    const race = new Race(props.difficulty, props.name, props.color);
+    const track = COURSES[props.courseId], { nearestRoad } = track;
+    const scene = new THREE.Scene(), scenery = buildRaceScene(scene, track);
+    const race = new Race(props.difficulty, props.name, props.color, track);
     const camera = new THREE.PerspectiveCamera(53, 1, .1, 1000);
     const karts = race.racers.map(racer => { const kart = createKart(racer.color); kart.scale.setScalar(1.2); scene.add(kart); return kart; });
     const shields = race.racers.map(() => {
@@ -111,6 +112,7 @@ export default function GameCanvas(props: Props) {
         if (!paused && racer.boost > 0) emit(new THREE.Vector3(p.x - Math.sin(racer.yaw) * 1.7, p.y, p.z - Math.cos(racer.yaw) * 1.7), '#ffd080', 2);
         if (!paused && racer.drifting) for (const side of [-1, 1]) emit(new THREE.Vector3(p.x + Math.cos(racer.yaw) * side, p.y - .5, p.z - Math.sin(racer.yaw) * side), racer.drift > .65 ? '#ffbc73' : '#8feeff', 1);
       });
+      if (!paused) scenery.update(dt);
       scenery.boxes.forEach((box, i) => { box.visible = race.boxes[i].cooldown <= 0; box.rotation.y = now / 850 + i; box.rotation.z = .2; box.position.y = race.boxes[i].position.y + 2 + Math.sin(now / 500 + i) * .35; });
       scenery.balloons.forEach((balloon, i) => { balloon.rotation.z = Math.sin(now / 2500 + i) * .045; });
       const activeIds = new Set(race.projectiles.map(p => p.id));
@@ -158,12 +160,12 @@ export default function GameCanvas(props: Props) {
       cancelAnimationFrame(frame); observer.disconnect(); props.audio.update(0, false, false); race.dispose();
       renderer.domElement.removeEventListener('webglcontextlost', contextLost);
       disposeObject(scene);
-      scene.traverse(o => { if (o instanceof THREE.LineSegments) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
+      scene.traverse(o => { if (o instanceof THREE.LineSegments || o instanceof THREE.Points) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
       scenery.background.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     };
-  }, [props.color, props.difficulty, props.raceKey, props.running, input]);
+  }, [props.courseId, props.color, props.difficulty, props.raceKey, props.running, input]);
   return <>
-    <div className="game-canvas" ref={host} role="img" aria-label="Cloudburst Causeway 3D kart race" />
+    <div className="game-canvas" ref={host} role="img" aria-label={`${COURSES[props.courseId].name} 3D kart race`} />
     {error && <div className="graphics-error" role="alert">{error}</div>}
     {props.running && <div className="touch-controls">{[['ArrowLeft', '←'], ['ArrowRight', '→'], ['Space', 'DRIFT'], ['KeyE', 'ITEM'], ['ArrowDown', 'BRAKE'], ['ArrowUp', 'GO']].map(([code, label]) => <button key={code} aria-label={`Drive ${label}`} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(code, true); }} onPointerUp={() => setPressed(code, false)} onPointerCancel={() => setPressed(code, false)} onLostPointerCapture={() => setPressed(code, false)}>{label}</button>)}</div>}
   </>;
