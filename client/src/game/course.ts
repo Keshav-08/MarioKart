@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-export type CourseId = 'cloudburst' | 'neon' | 'foundry';
+import { beachHeight, beachDrivable } from './beach';
+export type CourseId = 'cloudburst' | 'neon' | 'foundry' | 'beach';
 export interface CourseSpec {
   id: CourseId; name: string; subtitle: string; difficulty: string; color: string;
   points: number[][]; width: number; items: number[]; boosts: number[]; jumps: number[];
@@ -25,6 +26,11 @@ export const courseSpecs: CourseSpec[] = [
     points: [[0,7,-85],[60,7,-85],[102,12,-58],[110,18,-5],[88,20,41],[51,15,71],[65,12,113],[24,9,139],[-29,7,125],[-55,9,85],[-91,14,64],[-116,19,21],[-105,16,-31],[-64,10,-74],[-25,7,-85]],
     items: [.05,.22,.42,.59,.78,.93], boosts: [.10,.30,.52,.83], jumps: [.30], pace: 2, cornering: 24, laneScale: .9, racingLine: [[0,0],[.17,1.4],[.24,-1.2],[.30,0],[.43,1],[.55,-1],[.7,.8],[.84,-1],[1,0]],
     sectors: ['THE DOCKS','TURBINE RUN','SPILLWAY','COOLING CANAL','FURNACE STRAIGHT'] },
+  { id:'beach', name:'Sunset Sands', subtitle:'Open sand. Dune jumps. Follow the flags.', difficulty:'Open beach · 2 / 5',color:'#efa951',width:22,
+    points:[[0,3,-65],[53,3,-63],[95,3,-30],[103,3,19],[78,3,58],[50,3,87],[13,3,111],[-36,3,108],[-82,3,81],[-105,3,38],[-96,3,-10],[-65,3,-52],[-25,3,-66]],
+    items:[.05,.20,.36,.53,.70,.88],boosts:[.10,.27,.56,.76],jumps:[.27,.76],pace:0,cornering:24,laneScale:1.2,
+    racingLine:[[0,0],[.2,1],[.35,-1],[.5,0],[.7,1],[.85,-1],[1,0]],
+    sectors:['SUNSET BOARDWALK','PALM COVE','DUNE RUN','TIDAL FLATS','SURF SHACKS'] },
 ];
 function createCourse(spec: CourseSpec) {
   const ROAD_WIDTH = spec.width;
@@ -41,7 +47,9 @@ const shortSamples = shortcut.getSpacedPoints(90);
 function pointAt(p: number, lane = 0) {
   const point = course.getPointAt(wrap(p));
   const tangent = course.getTangentAt(wrap(p));
-  return point.add(new THREE.Vector3(tangent.z, 0, -tangent.x).normalize().multiplyScalar(lane));
+  point.add(new THREE.Vector3(tangent.z, 0, -tangent.x).normalize().multiplyScalar(lane));
+  if (spec.id === 'beach') point.y = beachHeight(point.x,point.z);
+  return point;
 }
 function yawAt(p: number) { const t = course.getTangentAt(wrap(p)); return Math.atan2(t.x, t.z); }
 interface RoadPoint { progress: number; point: THREE.Vector3; distance: number; shortcut: boolean; tangent: THREE.Vector3 }
@@ -65,6 +73,14 @@ function projectRoad(position: THREE.Vector3, allowShortcut: boolean, heights?: 
 }
 // Support requires both a road beneath the kart and a compatible surface height.
 function roadSupport(position: THREE.Vector3, minHeight: number, maxHeight: number) {
+  if (spec.id === 'beach') {
+    const y = beachHeight(position.x,position.z);
+    if (!beachDrivable(position.x,position.z) || y < minHeight || y > maxHeight) return null;
+    const road = projectRoad(position,false)!;
+    const t = road.tangent, epsilon=.2;
+    const slope = (beachHeight(position.x+t.x*epsilon,position.z+t.z*epsilon)-beachHeight(position.x-t.x*epsilon,position.z-t.z*epsilon))/(2*epsilon);
+    return {...road, point:new THREE.Vector3(position.x,y,position.z), tangent:new THREE.Vector3(t.x,slope,t.z).normalize()};
+  }
   return projectRoad(position, true, [minHeight, maxHeight]);
 }
 function nearestRoad(position: THREE.Vector3, allowShortcut = true): RoadPoint {
@@ -82,6 +98,7 @@ function nearestRoad(position: THREE.Vector3, allowShortcut = true): RoadPoint {
 }
 export type RaceCourse = ReturnType<typeof createCourse>;
 export const COURSES = Object.fromEntries(courseSpecs.map(spec => [spec.id, createCourse(spec)])) as Record<CourseId, RaceCourse>;
+export const ALL_TRACKS: CourseId[] = ['cloudburst','neon','foundry','beach'];
 export const CUP_TRACKS: CourseId[] = ['cloudburst','neon','foundry'];
 // Compatibility exports for the original course and existing tests.
 export const { course, courseLength, ROAD_WIDTH, pointAt, yawAt, nearestRoad, roadSupport, itemLocations, boostLocations, shortcut, shortcutStart, shortcutEnd, district } = COURSES.cloudburst;

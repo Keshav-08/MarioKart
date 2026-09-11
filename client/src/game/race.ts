@@ -1,3 +1,4 @@
+import { beachHeight, beachDrivable } from './beach';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CHECKPOINTS, TOTAL_LAPS, wrap, COURSES, type RaceCourse } from './course';
@@ -22,7 +23,7 @@ export interface Racer {
   id: number; name: string; color: string; body: CANNON.Body; yaw: number;
   progress: number; previous: number; gate: number; lapTimes: number[]; lapBegin: number;
   finish: number | null; item: Item | null; itemAge: number; shield: number; boost: number;
-  stun: number; immunity: number; drift: number; drifting: boolean; speed: number;
+  steering: number; turnAuthority: number; boostPower: number; stun: number; immunity: number; drift: number; drifting: boolean; speed: number;
   motion: MotionState; airTime: number; departureHeight: number; rescueTime: number; rescueFrom: THREE.Vector3; rescueTo: THREE.Vector3;
   stuck: number; lane: number; shortRoute: boolean; padCooldown: number;
 }
@@ -30,7 +31,7 @@ export interface Projectile { id: number; owner: number; target: number | null; 
 export interface RaceEvent { type: 'pickup' | 'boost' | 'hit' | 'shield' | 'lap' | 'finish' | 'launch' | 'recover'; position: THREE.Vector3; color: string; text?: string }
 export interface Standing { id: number; name: string; color: string; lap: number; finish: number | null; progress: number }
 export interface RaceSnapshot {
-  motion: MotionState; time: number; speed: number; yaw: number; x: number; z: number; lap: number; lapTime: number; laps: number[]; position: number;
+  nextCheckpoint: number; motion: MotionState; time: number; speed: number; yaw: number; x: number; z: number; lap: number; lapTime: number; laps: number[]; position: number;
   item: Item | null; charge: number; boost: number; shield: number; stun: number;
   progress: number; standings: Standing[]; finished: boolean; complete: boolean;
 }
@@ -63,7 +64,7 @@ export class Race {
       const position = pointAt(progress, lane);
       const body = new CANNON.Body({ mass: 100, shape: new CANNON.Sphere(1.05), position: new CANNON.Vec3(position.x, position.y + 1, position.z), fixedRotation: true, linearDamping: 0 });
       this.world.addBody(body);
-      this.racers.push({ ...profile, id, body, yaw: yawAt(progress), progress, previous: wrap(progress), gate: -1, lapTimes: [], lapBegin: 0, finish: null, item: null, itemAge: 0, shield: 0, boost: 0, stun: 0, immunity: 0, drift: 0, drifting: false, speed: 0, motion: 'grounded', airTime: 0, departureHeight: position.y, rescueTime: 0, rescueFrom: position.clone(), rescueTo: position.clone(), stuck: 0, lane, shortRoute: false, padCooldown: 0 });
+      this.racers.push({ ...profile, id, body, yaw: yawAt(progress), progress, previous: wrap(progress), gate: -1, lapTimes: [], lapBegin: 0, finish: null, item: null, itemAge: 0, shield: 0, boost: 0, steering: 0, turnAuthority: 2.05, boostPower: 0, stun: 0, immunity: 0, drift: 0, drifting: false, speed: 0, motion: 'grounded', airTime: 0, departureHeight: position.y, rescueTime: 0, rescueFrom: position.clone(), rescueTo: position.clone(), stuck: 0, lane, shortRoute: false, padCooldown: 0 });
     });
   }
   private random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -98,6 +99,7 @@ export class Race {
     if (racer.motion === 'rescuing') return;
     const progress = racer.gate < 0 ? -.003 : racer.gate / CHECKPOINTS + .002;
     racer.rescueFrom.copy(vector(racer)); racer.rescueTo.copy(pointAt(progress, clamp(racer.lane, -3, 3))).y += 1;
+    racer.steering = 0; racer.turnAuthority = 2.05; racer.boostPower = 0;
     racer.motion = 'rescuing'; racer.rescueTime = 0; racer.body.collisionFilterMask = 0;
     racer.body.velocity.set(0, 0, 0); racer.boost = 0; racer.drift = 0; racer.drifting = false;
     racer.stuck = 0; racer.stun = 0; racer.shortRoute = false;
@@ -135,10 +137,20 @@ export class Race {
     const useItem = !!racer.item && racer.itemAge > 1.5 + racer.id * .24 && (racer.item !== 'turbo' || bend < .25) && (racer.item !== 'trap' || this.racers.some(r => r.id !== racer.id && racer.progress > r.progress && racer.progress - r.progress < .05));
     return { throttle: racer.speed > targetSpeed + 2 ? -.45 : 1, steer: clamp(error * 2.8, -1, 1), drift: bend > .34 && Math.abs(error) > .12 && racer.speed > 16, useItem };
   }
+  private advanceGate(racer: Racer) {
+        racer.gate++;
+        if (racer.gate > 0 && racer.gate % CHECKPOINTS === 0) {
+          racer.lapTimes.push(this.time - racer.lapBegin); racer.lapBegin = this.time;
+          this.events.push({ type: 'lap', position: vector(racer), color: racer.color, text: racer.id === 0 ? racer.lapTimes.length === 2 ? 'FINAL LAP!' : 'LAP 2 / 3' : undefined });
+          if (racer.gate === TOTAL_LAPS * CHECKPOINTS) { racer.finish = this.time; this.events.push({ type: 'finish', position: vector(racer), color: racer.color }); }
+        }
+  }
   step(dt: number, input: DriveInput) {
     const { nearestRoad, roadSupport, ROAD_WIDTH, boostLocations } = this.track;
     if (!this.started || this.complete) return;
     this.time += dt;
+    const previousPositions = this.racers.map(vector);
+    const wasRescuing = this.racers.map(r => r.motion === 'rescuing');
     for (const box of this.boxes) box.cooldown = Math.max(0, box.cooldown - dt);
     for (const racer of this.racers) {
       if (racer.motion === 'rescuing') { this.rescueStep(racer, dt); continue; }
@@ -146,6 +158,13 @@ export class Race {
       racer.itemAge += dt;
       const controls = racer.id === 0 && racer.finish === null ? input : this.ai(racer);
       if (controls.useItem) this.useItem(racer);
+      // Smooth intent for keyboard, touch and bots alike; releasing/reversing responds faster.
+      const desiredSteer = racer.stun > 0 ? 0 : clamp(controls.steer, -1, 1);
+      const steerResponse = desiredSteer === 0 || desiredSteer * racer.steering < 0 ? 18 : 12;
+      racer.steering += (desiredSteer - racer.steering) * (1 - Math.exp(-steerResponse * dt));
+      const boostTarget = racer.boost > 0 && racer.stun <= 0 && controls.throttle > 0 ? 35 : 0;
+      racer.boostPower += (boostTarget - racer.boostPower) * (1 - Math.exp(-6 * dt));
+      if (this.track.id === 'beach' && !beachDrivable(racer.body.position.x,racer.body.position.z)) { this.recover(racer); continue; }
       const support = roadSupport(vector(racer), racer.body.position.y - 1.8, racer.body.position.y - .2);
       const road = support ?? nearestRoad(vector(racer));
       if (racer.motion === 'grounded' && !support) {
@@ -155,30 +174,42 @@ export class Race {
       if (racer.motion !== 'grounded') {
         racer.airTime += dt; racer.drift = 0; racer.drifting = false;
         // Limited air steering changes heading, but cannot pull the kart back onto the road.
-        const airTurn = controls.steer * .45 * dt;
+        racer.turnAuthority += (.75 - racer.turnAuthority) * (1 - Math.exp(-dt / .3));
+        const airTurn = racer.steering * racer.turnAuthority * dt;
         racer.yaw += airTurn;
         const vx = racer.body.velocity.x, vz = racer.body.velocity.z;
         racer.body.velocity.x = vx * Math.cos(airTurn) + vz * Math.sin(airTurn);
         racer.body.velocity.z = vz * Math.cos(airTurn) - vx * Math.sin(airTurn);
+        // Air braking sheds some horizontal speed without cancelling gravity or momentum.
+        const airDrag = controls.throttle < 0 ? Math.exp(-.65 * dt) : 1;
+        racer.body.velocity.x *= airDrag; racer.body.velocity.z *= airDrag;
         racer.body.velocity.y -= 28 * dt;
         racer.motion = racer.body.velocity.y < 0 && !roadSupport(vector(racer), -Infinity, racer.body.position.y - .98) ? 'falling' : 'airborne';
-        if (racer.body.position.y <= 1 || racer.body.position.y < racer.departureHeight - 14 || racer.airTime > 2.5) this.recover(racer);
+        if (racer.body.position.y <= (this.track.id === 'beach' ? -3 : 1) || racer.body.position.y < racer.departureHeight - 14 || racer.airTime > 2.5) this.recover(racer);
         continue;
       }
-      const offroad = road.distance > (road.shortcut ? 3.3 : ROAD_WIDTH / 2) || (road.shortcut && racer.boost <= 0);
+      const offroad = this.track.id !== 'beach' && (road.distance > (road.shortcut ? 3.3 : ROAD_WIDTH / 2) || (road.shortcut && racer.boost <= 0));
       const drifting = controls.drift && Math.abs(controls.steer) > .1 && racer.speed > 9 && racer.stun <= 0;
       if (drifting) racer.drift = Math.min(1, racer.drift + dt / 1.25);
       if (!drifting && racer.drifting) { if (!controls.drift && racer.drift >= .4 && racer.stun <= 0) { racer.boost = Math.max(racer.boost, .7 + racer.drift); this.events.push({ type: 'boost', position: vector(racer), color: '#ffd967' }); } racer.drift = 0; }
       racer.drifting = drifting;
       const forwardSpeed = racer.body.velocity.x * Math.sin(racer.yaw) + racer.body.velocity.z * Math.cos(racer.yaw);
-      if (racer.stun <= 0) racer.yaw += controls.steer * (drifting ? 2.4 : 2.05) * Math.min(1, Math.abs(forwardSpeed) / 9) * Math.sign(forwardSpeed || 1) * dt;
+      const highSpeed = clamp((Math.abs(forwardSpeed) - 20) / 35, 0, 1);
+      const authority = (drifting ? 2.4 : 2.05) * (1 - highSpeed * (drifting ? .12 : .22));
+      racer.turnAuthority += (authority - racer.turnAuthority) * (1 - Math.exp(-10 * dt));
+      if (racer.stun <= 0) racer.yaw += racer.steering * racer.turnAuthority * Math.min(1, Math.abs(forwardSpeed) / 9) * Math.sign(forwardSpeed || 1) * dt;
       const fx = Math.sin(racer.yaw), fz = Math.cos(racer.yaw), rx = fz, rz = -fx;
       let speed = racer.body.velocity.x * fx + racer.body.velocity.z * fz;
-      const lateral = (racer.body.velocity.x * rx + racer.body.velocity.z * rz) * Math.exp(-(drifting ? 3 : 15) * dt);
+      const lateral = (racer.body.velocity.x * rx + racer.body.velocity.z * rz) * Math.exp(-(drifting ? 3 : 15 + racer.boostPower / 35 * 3) * dt);
       const throttle = racer.stun > 0 ? 0 : controls.throttle;
-      speed += (throttle * (throttle < 0 && speed > 1 ? 38 : 23) + (racer.boost > 0 && throttle >= 0 ? 35 : 0)) * dt;
+      speed += (throttle * (throttle < 0 && speed > 1 ? 38 : 23) + (throttle > 0 ? racer.boostPower : 0)) * dt;
+      const shallows = this.track.id === 'beach' && beachHeight(racer.body.position.x,racer.body.position.z) < .3;
+      if (shallows && racer.boost <= 0) speed *= Math.exp(-.6 * dt);
       speed *= Math.exp(-(offroad && racer.boost <= 0 ? 2.4 : throttle ? .12 : 1) * dt);
-      speed = clamp(speed, -10, racer.boost > 0 ? 55 : 40);
+      const speedLimit = racer.boost > 0 ? 55 : 40;
+      // Let boost speed decay rather than instantly chopping velocity when its timer ends.
+      if (speed > speedLimit) speed = Math.max(speedLimit, speed - 24 * dt);
+      speed = clamp(speed, -10, 55);
       const vertical = road.tangent.y / Math.max(.1, Math.hypot(road.tangent.x, road.tangent.z)) *
         (racer.body.velocity.x * road.tangent.x + racer.body.velocity.z * road.tangent.z);
       racer.body.velocity.set(fx * speed + rx * lateral, vertical, fz * speed + rz * lateral);
@@ -190,6 +221,16 @@ export class Race {
     this.world.step(dt);
     for (const racer of this.racers) {
       if (racer.motion === 'rescuing') continue;
+      if (this.track.id === 'beach' && racer.finish === null && !wasRescuing[racer.id]) {
+        const nextGate = racer.gate + 1;
+        const gate = this.track.pointAt(nextGate / CHECKPOINTS), yaw = this.track.yawAt(nextGate / CHECKPOINTS);
+        const before = previousPositions[racer.id], after = vector(racer);
+        const signed = (p: THREE.Vector3) => (p.x-gate.x)*Math.sin(yaw)+(p.z-gate.z)*Math.cos(yaw);
+        const a=signed(before), b=signed(after), fraction= a < 0 && b >= 0 ? -a/(b-a) : -1;
+        const hit=before.clone().lerp(after, Math.max(0,fraction));
+        const crossed=fraction>=0 && Math.abs((hit.x-gate.x)*Math.cos(yaw)-(hit.z-gate.z)*Math.sin(yaw)) <= this.track.width/2+2 && hit.y-gate.y>.25 && hit.y-gate.y<4.5;
+        if (crossed) this.advanceGate(racer);
+      }
       const bottom = racer.body.position.y - 1;
       const road = racer.motion === 'grounded'
         ? roadSupport(vector(racer), bottom - .8, bottom + .8)
@@ -208,13 +249,11 @@ export class Race {
       racer.previous = road.progress; racer.airTime = 0;
       racer.speed = Math.hypot(racer.body.velocity.x, racer.body.velocity.z);
       const nextGate = racer.gate + 1;
-      if (racer.progress >= nextGate / CHECKPOINTS && racer.progress < (nextGate + 1) / CHECKPOINTS && racer.finish === null) {
-        racer.gate++;
-        if (racer.gate > 0 && racer.gate % CHECKPOINTS === 0) {
-          racer.lapTimes.push(this.time - racer.lapBegin); racer.lapBegin = this.time;
-          this.events.push({ type: 'lap', position: vector(racer), color: racer.color, text: racer.id === 0 ? racer.lapTimes.length === 2 ? 'FINAL LAP!' : 'LAP 2 / 3' : undefined });
-          if (racer.gate === TOTAL_LAPS * CHECKPOINTS) { racer.finish = this.time; this.events.push({ type: 'finish', position: vector(racer), color: racer.color }); }
-        }
+      const crossed = this.track.id !== 'beach' && racer.progress >= nextGate / CHECKPOINTS && racer.progress < (nextGate + 1) / CHECKPOINTS;
+      if (crossed && racer.finish === null) this.advanceGate(racer);
+      if (this.track.id === 'beach') {
+        // Roaming does not grant progress: rank stays anchored to the last earned gate.
+        racer.progress = racer.gate / CHECKPOINTS + Math.min(1/CHECKPOINTS-.00001,wrap(road.progress-racer.gate/CHECKPOINTS));
       }
       if (racer.finish !== null) continue;
       for (const box of this.boxes) if (box.cooldown <= 0 && !racer.item && vector(racer).distanceTo(box.position.clone().add(new THREE.Vector3(0, 1, 0))) < 3.1) { this.award(racer); box.cooldown = 5; break; }
@@ -241,7 +280,7 @@ export class Race {
   }
   snapshot(): RaceSnapshot {
     const player = this.racers[0], order = this.order();
-    return { motion: player.motion, time: this.time, speed: player.speed * 3.6, yaw: player.yaw, x: player.body.position.x, z: player.body.position.z, lap: Math.min(3, player.lapTimes.length + 1), lapTime: player.finish !== null ? player.lapTimes.at(-1)! : this.time - player.lapBegin, laps: [...player.lapTimes], position: order.findIndex(r => r.id === 0) + 1, item: player.item, charge: player.drift, boost: player.boost, shield: player.shield, stun: player.stun, progress: wrap(player.progress), standings: order.map(r => ({ id: r.id, name: r.name, color: r.color, lap: Math.min(3, r.lapTimes.length + 1), finish: r.finish, progress: r.progress })), finished: player.finish !== null, complete: this.complete };
+    return { nextCheckpoint: (player.gate + 1) % CHECKPOINTS, motion: player.motion, time: this.time, speed: player.speed * 3.6, yaw: player.yaw, x: player.body.position.x, z: player.body.position.z, lap: Math.min(3, player.lapTimes.length + 1), lapTime: player.finish !== null ? player.lapTimes.at(-1)! : this.time - player.lapBegin, laps: [...player.lapTimes], position: order.findIndex(r => r.id === 0) + 1, item: player.item, charge: player.drift, boost: player.boost, shield: player.shield, stun: player.stun, progress: wrap(player.progress), standings: order.map(r => ({ id: r.id, name: r.name, color: r.color, lap: Math.min(3, r.lapTimes.length + 1), finish: r.finish, progress: r.progress })), finished: player.finish !== null, complete: this.complete };
   }
   dispose() { this.racers.forEach(r => this.world.removeBody(r.body)); this.projectiles = []; }
 }

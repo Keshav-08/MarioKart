@@ -104,7 +104,7 @@ export default function GameCanvas(props: Props) {
         const kart = karts[i], p = racer.body.position;
         kart.position.set(p.x, p.y - 1, p.z); kart.rotation.y = racer.yaw + (racer.stun > 0 ? Math.sin(racer.stun * 18) * 1.4 : 0);
         kart.traverse(part => { if (part.userData.wheel && !paused) part.rotateY(racer.speed * dt / .36); });
-        const road = nearestRoad(kart.position);
+        const road = track.roadSupport(kart.position, kart.position.y - 1, kart.position.y + 1) ?? nearestRoad(kart.position);
         const pitch = racer.motion === 'grounded' ? Math.asin(THREE.MathUtils.clamp(-road.tangent.y, -.3, .3)) : racer.motion === 'rescuing' ? 0 : -Math.atan2(racer.body.velocity.y, Math.max(15, racer.speed));
         kart.rotation.order = 'YXZ'; kart.rotation.x += (THREE.MathUtils.clamp(pitch, -.55, .55) - kart.rotation.x) * (1 - Math.exp(-8 * dt));
         kart.rotation.z = racer.drifting ? Math.sin(race.time * 20) * .03 : 0;

@@ -193,3 +193,6 @@ dialog { border: 1px solid #cdd8bf; border-radius: 15px; padding: 0; width: min(
 @media(max-width:700px) { .track-cards { grid-template-columns:1fr; gap:10px; }.track-card { display:grid; grid-template-columns:115px 1fr; }.track-card svg { height:100%; min-height:165px; }.track-card > div { padding:12px; }.track-card h3 { font-size:16px; }.track-card p { min-height:0; }.track-card footer { font-size:9px; }.race-mode-picker p { margin:0; }.cup-results ol { gap:3px; } }
 
 .cup-results li { gap: 8px; }
+
+@media(min-width:1000px) { .track-cards { grid-template-columns:repeat(4,1fr); }.track-card h3 { font-size:16px; } }
+.track-card.beach { background:#fff8e9; }

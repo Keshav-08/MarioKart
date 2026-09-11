@@ -1,3 +1,4 @@
+import { buildBeachScene } from './beachScene';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { COURSES, type RaceCourse } from './course';
@@ -48,6 +49,7 @@ function batch(group: THREE.Group) {
 }
 
 export function buildRaceScene(scene: THREE.Scene, track: RaceCourse = COURSES.cloudburst) {
+  if (track.id === 'beach') return buildBeachScene(scene,track);
   const { boostLocations, course, itemLocations, pointAt, ROAD_WIDTH, shortcut, yawAt } = track;
   const night = track.id === 'neon', industrial = track.id === 'foundry';
   const sky = document.createElement('canvas'); sky.width = 4; sky.height = 512;

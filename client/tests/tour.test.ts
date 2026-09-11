@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { COURSES, CUP_TRACKS } from '../src/game/course';
+import { COURSES, CUP_TRACKS, ALL_TRACKS } from '../src/game/course';
 import { Race, type Standing } from '../src/game/race';
 import { addRound, scoreRound, cupStandings } from '../src/game/championship';
 import { loadRecords, loadGhost, saveRace } from '../src/game/storage';
@@ -14,7 +14,7 @@ function drive(race: Race) {
   const speed=t.jumps.some(j=>p>j-.025&&p<j+.03)?24:Math.max(14,34+t.pace-bend*t.cornering);
   return { throttle:r.speed>speed+2?-.6:1, steer:THREE.MathUtils.clamp(error*2.8,-1,1), drift:false, useItem:!!r.item && r.itemAge>2 && (r.item!=='turbo'||bend<.25) };
 }
-for (const id of CUP_TRACKS) test(`${id}: valid item placements and all eight racers finish the layout`, () => {
+for (const id of ALL_TRACKS) test(`${id}: valid item placements and all eight racers finish the layout`, () => {
   const track=COURSES[id]; assert.ok(track.pointAt(0).distanceTo(track.pointAt(1))<.001);
   for(const item of track.itemLocations) assert.ok(track.roadSupport(item.position,item.position.y-.2,item.position.y+.2));
   const race=new Race('normal','Tour driver','#ff7700',track); race.started=true;
