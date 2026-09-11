@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 export interface KartInput {
-  throttle: number; steer: number; drift: boolean;
+  pitch: number; throttle: number; steer: number; drift: boolean;
   reset: boolean; camera: boolean; useItem: boolean; pause: boolean;
 }
-const handled = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'KeyR', 'KeyC', 'KeyE', 'ShiftLeft', 'ShiftRight', 'Escape', 'KeyP']);
-const empty = (): KartInput => ({ throttle: 0, steer: 0, drift: false, reset: false, camera: false, useItem: false, pause: false });
+const handled = new Set(['KeyQ', 'KeyF', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'Space', 'KeyR', 'KeyC', 'KeyE', 'ShiftLeft', 'ShiftRight', 'Escape', 'KeyP']);
+const empty = (): KartInput => ({ pitch: 0, throttle: 0, steer: 0, drift: false, reset: false, camera: false, useItem: false, pause: false });
 
 // The hook owns input intent; the fixed-step race simulation owns drift charge,
 // turbo duration and item consumption so bots and the player share the rules.
@@ -17,6 +17,7 @@ export function useKartControls() {
     const has = (...codes: string[]) => codes.some(key => keys.current.has(key));
     input.current.throttle = Number(has('KeyW', 'ArrowUp')) - Number(has('KeyS', 'ArrowDown'));
     input.current.steer = Number(has('KeyA', 'ArrowLeft')) - Number(has('KeyD', 'ArrowRight'));
+    input.current.pitch = Number(has('KeyQ')) - Number(has('KeyF'));
     input.current.drift = has('Space');
     if (pressed && code === 'KeyR') input.current.reset = true;
     if (pressed && code === 'KeyC') input.current.camera = true;

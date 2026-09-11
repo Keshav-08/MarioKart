@@ -1,5 +1,7 @@
+export const WORLD_SCALE = 1.5;
 // One height function drives both the rendered sand and the physical support surface.
 export function beachHeight(x: number, z: number) {
+  x /= WORLD_SCALE; z /= WORLD_SCALE;
   const radius = Math.hypot(x, z - 20);
   const shore = Math.max(0, (radius - 112) / 30);
   const dune = (cx:number,cz:number,h:number,w:number) => h * Math.exp(-((x-cx)**2+(z-cz)**2)/(w*w));

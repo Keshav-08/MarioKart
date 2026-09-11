@@ -1,3 +1,4 @@
+import type { Vehicle } from './adventure';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon-es';
@@ -7,7 +8,7 @@ function box(parent: THREE.Object3D, size: [number, number, number], position: [
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
   mesh.position.set(...position); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
 }
-export function createKart(color: string, ghost = false): THREE.Group {
+export function createKart(color: string, ghost = false, vehicle: Vehicle = 'kart'): THREE.Group {
   const kart = new THREE.Group();
   box(kart, [1.55, 0.32, 2.4], [0, 0.55, 0], color);
   box(kart, [1.35, 0.34, 0.7], [0, 0.75, 0.8], color);
@@ -25,6 +26,27 @@ export function createKart(color: string, ghost = false): THREE.Group {
     const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.34, 8), new THREE.MeshStandardMaterial({ color: '#bec7bd', metalness: 0.5 }));
     hub.userData.wheel = true; hub.rotation.z = Math.PI / 2; hub.position.copy(wheel.position); kart.add(hub);
   }
+  if(vehicle==='bike') {
+    kart.scale.x=.6;
+    for(const part of [...kart.children]) if(part.userData.wheel) { if(part.position.x>0){part.removeFromParent();if(part instanceof THREE.Mesh){part.geometry.dispose();(part.material as THREE.Material).dispose();}} else part.position.x=0; }
+    box(kart,[.7,.8,1],[0,1.1,.6],color);
+  }
+  if(vehicle==='buggy') {
+    for(const part of kart.children) if(part.userData.wheel) part.scale.setScalar(1.3);
+    for(const x of [-.7,.7]) box(kart,[.1,1.5,.1],[x,1.5,-.5],'#40464b');
+    box(kart,[1.5,.12,.12],[0,2.2,-.5],'#40464b');
+  }
+  if(vehicle==='truck') {
+    box(kart,[1.9,.8,2.5],[0,.9,0],color);box(kart,[1.75,.9,1.2],[0,1.65,.55],color);
+    box(kart,[1.5,.55,.08],[0,1.75,1.18],'#9adaeb');
+  }
+  const wings=new THREE.Group();wings.name='flight-wings';wings.visible=false;
+  box(wings,[7,.15,1.3],[0,1.1,0],color);box(wings,[2.8,.12,.6],[0,1.5,-1.8],'#faf5df');
+  box(wings,[.16,1.3,1],[0,1.65,-1.6],color);
+  const propeller=box(wings,[3,.13,.12],[0,1.1,1.8],'#e3eee6');propeller.name='propeller';kart.add(wings);
+  const floats=new THREE.Group();floats.name='hover-floats';floats.visible=false;
+  for(const x of [-1.1,1.1])box(floats,[.7,.65,3.5],[x,.3,0],'#395c6a');kart.add(floats);
+  const rush=new THREE.Mesh(new THREE.CapsuleGeometry(.9,2.5,4,10),new THREE.MeshStandardMaterial({color:'#ff9b59',emissive:'#f85823',emissiveIntensity:.5}));rush.rotation.x=Math.PI/2;rush.position.y=1;rush.name='rush-shell';rush.visible=false;kart.add(rush);
   if (ghost) kart.traverse(object => { if (object instanceof THREE.Mesh) { const material = object.material as THREE.MeshStandardMaterial; material.transparent = true; material.opacity = 0.3; material.depthWrite = false; object.castShadow = false; } });
   return kart;
 }

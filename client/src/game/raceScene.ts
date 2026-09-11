@@ -59,11 +59,11 @@ export function buildRaceScene(scene: THREE.Scene, track: RaceCourse = COURSES.c
   scene.fog = new THREE.Fog(night ? '#18172d' : industrial ? '#7899a6' : '#f7c7b4', 170, 480);
   scene.add(new THREE.HemisphereLight(night ? '#a9baff' : '#fff1d5', '#6b68a9', 2));
   const sun = new THREE.DirectionalLight(night ? '#b7c8ff' : '#ffddab', night ? 1.7 : 2.5); sun.position.set(-70, 130, -80); sun.castShadow = true;
-  Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 1, far: 400 }); sun.shadow.mapSize.set(2048, 2048); sun.shadow.normalBias = .06; scene.add(sun);
+  Object.assign(sun.shadow.camera, { left: -240, right: 240, top: 240, bottom: -240, near: 1, far: 400 }); sun.shadow.mapSize.set(2048, 2048); sun.shadow.normalBias = .06; scene.add(sun);
   const staticWorld = new THREE.Group(); scene.add(staticWorld);
   const sea = mesh(staticWorld, new THREE.PlaneGeometry(1600, 1600), night ? '#14132b' : '#6bbec8', 0, -22, 0); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
-  mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 157 : 133, industrial ? 112 : 92, 33, 13), '#858cb9', -3, -17, 27);
-  const island = mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 155 : 131, industrial ? 155 : 131, 1, 13), night ? '#232436' : industrial ? '#607579' : '#80bda8', -3, -.5, 27); island.receiveShadow = true;
+  mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 235 : 200, industrial ? 168 : 138, 33, 13), '#858cb9', -3, -17, 27);
+  const island = mesh(staticWorld, new THREE.CylinderGeometry(industrial ? 232 : 197, industrial ? 232 : 197, 1, 13), night ? '#232436' : industrial ? '#607579' : '#80bda8', -3, -.5, 27); island.receiveShadow = true;
   // Shoulders are separate edge strips, so they cannot flicker through the asphalt on bends.
   road(staticWorld, course, ROAD_WIDTH + 1.8, '#e8bdcc', 520, ROAD_WIDTH);
   const asphalt = road(staticWorld, course, ROAD_WIDTH, night ? '#41496b' : industrial ? '#4b5964' : '#59627e', 520);

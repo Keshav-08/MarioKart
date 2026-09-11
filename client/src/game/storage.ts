@@ -1,8 +1,9 @@
+import type { Vehicle } from './adventure';
 import type { CourseId } from './course';
 import type { Difficulty, RaceSnapshot } from './race';
 import type { GhostFrame } from '../components/GameCanvas';
-export interface RaceRecord { courseId: CourseId; id: string; name: string; time: number; position: number; difficulty: Difficulty; laps: number[]; date: string }
-const keys = (courseId: CourseId) => ({ records: `apex.${courseId}.records.v1`, ghost: `apex.${courseId}.ghost.v1` });
+export interface RaceRecord { vehicle?: Vehicle; courseId: CourseId; id: string; name: string; time: number; position: number; difficulty: Difficulty; laps: number[]; date: string }
+const keys = (courseId: CourseId) => ({ records: `apex.${courseId}.records.adventure-v2`, ghost: `apex.${courseId}.ghost.adventure-v2` });
 export function loadRecords(courseId: CourseId = 'cloudburst'): RaceRecord[] {
   try {
     const data: unknown = JSON.parse(localStorage.getItem(keys(courseId).records) ?? '[]');
@@ -21,7 +22,7 @@ export function loadGhost(courseId: CourseId = 'cloudburst'): GhostFrame[] {
 export function saveRace(name: string, difficulty: Difficulty, snapshot: RaceSnapshot, ghost: GhostFrame[], courseId: CourseId = 'cloudburst') {
   const time = snapshot.standings.find(r => r.id === 0)!.finish!;
   const previous = loadRecords(courseId);
-  const record: RaceRecord = { courseId, id: crypto.randomUUID(), name, difficulty, time, position: snapshot.position, laps: snapshot.laps, date: new Date().toISOString() };
+  const record: RaceRecord = { courseId, vehicle: snapshot.vehicle, id: crypto.randomUUID(), name, difficulty, time, position: snapshot.position, laps: snapshot.laps, date: new Date().toISOString() };
   const records = [...previous, record].sort((a, b) => a.time - b.time).slice(0, 10);
   localStorage.setItem(keys(courseId).records, JSON.stringify(records));
   if (!previous.length || time < previous[0].time) {

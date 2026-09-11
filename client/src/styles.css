@@ -196,3 +196,5 @@ dialog { border: 1px solid #cdd8bf; border-radius: 15px; padding: 0; width: min(
 
 @media(min-width:1000px) { .track-cards { grid-template-columns:repeat(4,1fr); }.track-card h3 { font-size:16px; } }
 .track-card.beach { background:#fff8e9; }
+
+.vehicle-picker{display:grid;grid-template-columns:1fr 1fr;gap:8px}.vehicle-picker button{padding:12px;text-align:left;border:1px solid #ddd6ce;border-radius:12px;background:#fffaf3;color:#3b425c}.vehicle-picker button[aria-pressed=true]{border-color:#599dac;background:#e5f5f2;box-shadow:0 0 0 1px #599dac}.vehicle-picker small{display:block;font-size:11px;line-height:1.5;margin-top:5px}.transform-status{position:absolute;bottom:112px;left:50%;transform:translateX(-50%);color:#fff3c6;font-weight:800;font-size:12px;text-shadow:0 2px 4px #25354c;white-space:nowrap}.powerup-grid{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:700px){.powerup-grid{grid-template-columns:1fr 1fr}.transform-status{font-size:10px;bottom:100px}.vehicle-picker{grid-template-columns:1fr 1fr}}

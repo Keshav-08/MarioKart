@@ -29,6 +29,25 @@ npm start
 
 Production runs at **http://localhost:3001**. To inspect the frontend production build separately, use `npm run preview -w client` after building.
 
+## Adventure expansion: wheels, wings and water
+
+Choose **Comet Kart**, **Vector Bike**, **Dune Buggy** or **Atlas Truck** in the paddock. Each has different acceleration, steering, grip and collision mass. Bikes turn and accelerate faster; buggies lose less speed on rough terrain; trucks resist bumps. All four can transform into planes. The course footprints are now 50% larger, with the same three-lap race format and championship scoring.
+
+Every course has a marked **WINGS OUT** zone. Enter it on the road to deploy wings, pilot through the aerial corridor, then descend into the landing zone to return to wheels. **A/D or arrows steer, W accelerates, S slows, Q climbs and F dives.** Flight has altitude assistance and bounded climb/dive adjustment; it is arcade corridor flight, not unrestricted free flight. Gold rings mark required aerial checkpoints. Leaving the corridor triggers recovery. Bots use the same flight physics. Touch controls include CLIMB and DIVE.
+
+| Course | New adventure sections | Active hazards |
+| --- | --- | --- |
+| Sunset Sands | Twin Tide cave with left/right lanes around a central rock spine, palm ruins, Seabird Canyon flight, tidal-inlet hovercraft transformation | Timed surf crossings and cave rocks |
+| Cloudburst Causeway | Storm Cloud Run flight and Crystal Mountain tunnel | Timed crosswind hazards |
+| Neon Night Market | Rooftop Express flight and After Hours Arcade tunnel | Crossing delivery vehicles |
+| Stormwater Foundry | Turbine Airway flight and Furnace Hall tunnel | Steam vents |
+
+Yellow floor rings warn before hazards turn active/red. The danger occupies a lane, leaving room to steer around it. Shields, a hop, or armored Rocket Rush can help. The same hazard clock is shared by all racers. Bots avoid active hazards and choose cave lanes; if a bot stops earning checkpoints, it recovers to its last earned gate.
+
+The inlet deploys hovercraft floats automatically and removes the shallow-water speed penalty along its marked water surface. Other scenery is decorative; this is a stylized procedural world, not a destructible environment.
+
+New adventure records use `apex.<course>.records.adventure-v2` and corresponding ghost keys. Old `v1` records and ghosts remain in browser storage, but are not mixed with the longer layouts. Records show the vehicle used; ghosts record plane/hover transformations. There is still one fastest ghost per course.
+
 ## Track selection and championship
 
 Choose a course card to see its layout preview, length, layout difficulty, and full 3D scene. The course difficulty indicator describes the road; Cruise / Sport / Expert separately controls opponent pace.
@@ -46,7 +65,7 @@ Championship progress lasts for the current session; returning to the paddock or
 
 Each layout owns its centerline, road width, item rows, boost/jump zones, racing-line anchors, corner-speed tuning, and overtaking lane spread. Neon keeps bots tighter through the market turns; Foundry allows a faster pace. The old Cloudburst shortcut and jump positions do not leak into other maps.
 
-**Records and ghosts are separate per course.** The My records dialog has a tab for each course. The ghost toggle always refers to the selected track. Existing Cloudburst records and ghosts retain their original storage keys and still load; new courses use `apex.neon.*.v1` and `apex.foundry.*.v1` keys. There is one personal-best ghost per course across all AI difficulties.
+**Records and ghosts are separate per course.** The My records dialog has four course tabs. The ghost toggle refers to the selected track; adventure saves are versioned separately from pre-expansion races.
 
 ## Sunset Sands — open beach race
 
@@ -54,7 +73,7 @@ Select **Sunset Sands** in **Single race** mode. The existing Apex Tour still co
 
 The sand is a continuous terrain surface with dunes, a low boardwalk, palm groves, surf shacks, umbrellas and animated shore foam. You can drive far outside the flagged racing corridor without being pulled back or losing support. Shallow water slows unboosted karts; deep water triggers the timed checkpoint-safe rescue. Golden pads boost or launch a hop.
 
-Three laps still require all sixteen gates in sequence, crossed forward inside their marked width. Roaming or cutting to a later stretch does not grant checkpoints. The HUD and minimap identify the next required gate so you can rejoin correctly. Seven bots follow beach-specific racing lines and collect the shared item boxes. Scenery is decorative; sand and water determine the driving surface.
+Three laps still require all sixteen gates in sequence, crossed forward inside their marked width. Roaming or cutting to a later stretch does not grant checkpoints. The HUD and minimap identify the next required gate so you can rejoin correctly. Seven bots follow beach-specific racing lines and collect the shared item boxes. Cave rocks and timed hazards affect racing; the rest of the scenery is decorative. Sand and water determine the driving surface.
 
 ## What changed from the original scaffold
 
@@ -90,14 +109,19 @@ Drive through a floating cube to receive one inventory item. Cubes respawn after
 
 | Item | Effect |
 | --- | --- |
-| Triple-charge turbo | A three-second boost, including through rough shortcut terrain |
+| Triple Turbo | Three separately activated 1.5-second boosts; each use spends one charge |
 | Comet rocket | Homes toward the closest racer ahead; flies forward if no target exists; lasts up to six seconds |
 | Bubble shield | Blocks one attack or trap, or expires after six seconds |
 | Jelly slick | Drops a trap behind the kart; lasts up to eighteen seconds or until hit |
+| Rocket Rush | Five seconds of armored autopilot; HUD warns before returning control |
+| Shockwave | Hits opponents within 16 meters and clears projectiles within 20 meters |
+| Pickup Magnet | Eight seconds of extended pickup range and acceleration when following a nearby racer |
+| Glider Burst | Protected hop on land; boost and altitude gain during flight |
+| Decoy Crate | Pink fake item box dropped behind the vehicle; hits opponents like a trap |
 
 Hits cause a short spin and speed loss, then brief immunity so a racer cannot be continuously stun-locked. Shields block a hit. Bots use the same item functions and inventory restrictions as the player.
 
-Golden arrow pads grant a boost; the skybridge pad also launches a gravity-driven hop. Braking still works during a boost. Drift boosts, item turbos, and boost pads increase the kart's speed cap from 40 m/s (144 km/h) to 55 m/s (198 km/h).
+Golden arrow pads grant a boost. Marked flight corridors deploy wings; Glider Burst launches a hop elsewhere. Braking still works during a boost. Drift boosts, item turbos, and boost pads increase the kart's speed cap from 40 m/s (144 km/h) to 55 m/s (198 km/h).
 
 ### Race rules and results
 
@@ -113,7 +137,7 @@ Golden arrow pads grant a boost; the skybridge pad also launches a gravity-drive
 
 Synthesized Web Audio supplies the engine tone, countdown, item pickup, boost, hit, shield, lap, and finish sounds. Audio is unlocked by the race-start click and can be muted. There are no sound downloads. Drift sparks, turbo trails, impact bursts, shield bubbles, rotating item cubes, spinning wheels, hit shake, and speed-sensitive camera FOV communicate race events.
 
-Leaving the road removes support: the kart preserves its horizontal momentum, falls under gravity, and has limited air steering. It can land on a road only by crossing a supported surface from above; nearby roads at other elevations do not pull it up or down. Reaching island level, falling 14 meters, or remaining airborne for 2.5 seconds triggers a 1.4-second rescue arc to the last earned checkpoint, with a protective bubble during rescue and two seconds of attack immunity afterward. Race time keeps running, and airborne/rescuing karts cannot collect checkpoint credit. There is no invisible force pulling racers toward the road.
+Leaving the road removes support: the kart preserves its horizontal momentum, falls under gravity, and has limited air steering. It can land on a road only by crossing a supported surface from above; nearby roads at other elevations do not pull it up or down. Reaching island level, falling 14 meters, or remaining airborne for 2.5 seconds triggers a 1.4-second rescue arc to the last earned checkpoint, with a protective bubble during rescue and two seconds of attack immunity afterward. Race time keeps running, and rescues cannot grant checkpoint credit. Plane sections score their marked aerial gates. There is no invisible force pulling racers toward the road.
 
 The chase camera follows elevation and holds higher during falls so it does not dive underground. The alternative overview camera and minimap show the course and racer locations. The frame loop uses a monotonic clock, clamps elapsed frame time, and advances gameplay at a fixed 60 Hz. Hidden tabs suspend gameplay; returning resumes it. Audio, WebGL resources, physics bodies, observers, and input listeners are cleaned up when appropriate.
 
@@ -176,6 +200,8 @@ MarioKart/
 │       │   ├── useKartControls.ts    # Keyboard/touch input; item and pause commands
 │       │   └── useMultiplayer.ts     # Retained legacy online hook; unused by the current game
 │       └── game/
+│           ├── adventure.ts          # Vehicles, flight corridors and timed hazard definitions
+│           ├── adventureScene.ts     # Cave shells, flight rings, skyline and active hazard visuals
 │           ├── course.ts             # Four course definitions and per-course track projection
 │           ├── beach.ts              # Shared sand height and deep-water boundary
 │           ├── beachScene.ts         # Beach terrain, flags, boardwalk and seaside scenery
@@ -223,3 +249,7 @@ The original server still provides:
 Those endpoints describe the **legacy Evergreen Circuit**, use a bounded in-memory store, and are not used by Cloudburst Cup. Their timing plausibility checks are not authoritative anti-cheat. Keeping them separate prevents new course/combat records from being mixed with the old oval leaderboard.
 
 `npm run dev` starts Vite at 5173 and Express at 3001. Vite proxies `/api` and `/socket.io` to the server. `PORT` and comma-separated `CLIENT_ORIGIN` environment variables configure the retained backend; `.env` files are not loaded automatically. `npm start` serves the built game and API together. `npm run dev:solo` starts only what the current single-player game needs.
+
+### Expansion verification
+
+The adventure suite covers climb/dive and steering, item charges and effects, hover mode, hazard warnings, and complete races for every vehicle on all four courses. The earlier `finish.test.ts` diagnostic cases remain marked TODO because changes to lap-completion behavior were explicitly deferred. Ground lap-counting and championship settlement rules are unchanged by this expansion.

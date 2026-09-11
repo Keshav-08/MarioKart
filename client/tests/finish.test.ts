@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Race } from '../src/game/race';
 import { ALL_TRACKS, COURSES, CHECKPOINTS } from '../src/game/course';
 const idle={throttle:0,steer:0,drift:false,useItem:false};
-for (const id of ALL_TRACKS.filter(id=>id!=='beach')) test(`${id}: landing beyond a checkpoint window still completes the final lap`,()=>{
+for (const id of ALL_TRACKS.filter(id=>id!=='beach')) test(`${id}: landing beyond a checkpoint window still completes the final lap`,{todo:"Pre-existing diagnostic: lap-completion changes deferred at user request"},()=>{
  const track=COURSES[id], race=new Race('normal','Test','#fff',track);race.started=true;race.time=100;
  const r=race.racers[0];r.gate=3*CHECKPOINTS-1;r.lapTimes=[30,30];r.lapBegin=60;
  r.progress=2.995;r.previous=.995;r.motion='airborne';

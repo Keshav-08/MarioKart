@@ -1,3 +1,5 @@
+import { buildAdventureScene } from '../game/adventureScene';
+import { ADVENTURES, flightHeight, inSection, type Vehicle } from '../game/adventure';
 // @refresh reset
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -8,10 +10,10 @@ import { Race, type Difficulty, type RaceSnapshot } from '../game/race';
 import { RaceAudio } from '../game/audio';
 import { COURSES, type CourseId } from '../game/course';
 
-export interface GhostFrame { t: number; x: number; y: number; z: number; yaw: number }
+export interface GhostFrame { vehicle?: Vehicle; form?: 'ground' | 'plane' | 'hover'; t: number; x: number; y: number; z: number; yaw: number }
 export interface Telemetry extends RaceSnapshot { phase: 'preview' | 'countdown' | 'racing' | 'finished'; countdown: number; message: string; paused: boolean }
 interface Props {
-  courseId: CourseId; color: string; name: string; difficulty: Difficulty; raceKey: number; running: boolean; paused: boolean;
+  vehicle: Vehicle; courseId: CourseId; color: string; name: string; difficulty: Difficulty; raceKey: number; running: boolean; paused: boolean;
   audio: RaceAudio; ghost: GhostFrame[]; onTelemetry: (state: Telemetry) => void;
   onFinish: (snapshot: RaceSnapshot, ghost: GhostFrame[]) => void; onReset: () => void; onPause: () => void;
 }
@@ -24,19 +26,20 @@ export default function GameCanvas(props: Props) {
     try { renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); }
     catch { setError('This game needs WebGL. Enable graphics acceleration and reload to race.'); return; }
     setError('');
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
     host.current!.appendChild(renderer.domElement);
-    const track = COURSES[props.courseId], { nearestRoad } = track;
+    const track = COURSES[props.courseId];
     const scene = new THREE.Scene(), scenery = buildRaceScene(scene, track);
-    const race = new Race(props.difficulty, props.name, props.color, track);
+    const adventureScene=buildAdventureScene(scene,track);
+    const race = new Race(props.difficulty, props.name, props.color, track, props.vehicle);
     const camera = new THREE.PerspectiveCamera(53, 1, .1, 1000);
-    const karts = race.racers.map(racer => { const kart = createKart(racer.color); kart.scale.setScalar(1.2); scene.add(kart); return kart; });
+    const karts = race.racers.map(racer => { const kart = createKart(racer.color, false, racer.vehicle); kart.scale.multiplyScalar(1.2); scene.add(kart); return kart; });
     const shields = race.racers.map(() => {
       const shield = new THREE.Mesh(new THREE.SphereGeometry(2.05, 16, 12), new THREE.MeshStandardMaterial({ color: '#95f5ff', emissive: '#58badb', emissiveIntensity: .6, transparent: true, opacity: .28, roughness: .15, depthWrite: false, wireframe: true }));
       scene.add(shield); return shield;
     });
-    const ghostKart = createKart('#c5efff', true); ghostKart.scale.setScalar(1.2); scene.add(ghostKart);
+    const ghostKart = createKart('#c5efff', true, props.ghost[0]?.vehicle ?? props.vehicle); ghostKart.scale.multiplyScalar(1.2); scene.add(ghostKart);
     const projectileMeshes = new Map<number, THREE.Mesh>();
     const particleGeometry = new THREE.SphereGeometry(.2, 4, 3);
     const particleMesh = new THREE.InstancedMesh(particleGeometry, new THREE.MeshBasicMaterial({ color: '#ffffff' }), 220); particleMesh.frustumCulled = false; scene.add(particleMesh);
@@ -55,7 +58,7 @@ export default function GameCanvas(props: Props) {
     const recording: GhostFrame[] = [];
     const cameraTarget = new THREE.Vector3(), look = new THREE.Vector3(0, 6, 24), lookTarget = new THREE.Vector3(), dummy = new THREE.Object3D();
     const player = race.racers[0];
-    camera.position.set(145, 165, 205); camera.lookAt(look);
+    camera.position.set(218, 248, 308); camera.lookAt(look);
     if (props.running) { camera.position.set(player.body.position.x - Math.sin(player.yaw) * 12, player.body.position.y + 7, player.body.position.z - Math.cos(player.yaw) * 12); look.copy(new THREE.Vector3(player.body.position.x, player.body.position.y + 1, player.body.position.z)); }
     const resize = () => {
       const width = host.current!.clientWidth, height = host.current!.clientHeight;
@@ -82,12 +85,12 @@ export default function GameCanvas(props: Props) {
           accumulator += dt;
           pendingItem ||= input.current.useItem; input.current.useItem = false;
           while (accumulator >= 1 / 60) {
-            race.step(1 / 60, { throttle: input.current.throttle, steer: input.current.steer, drift: input.current.drift, useItem: pendingItem }); pendingItem = false; accumulator -= 1 / 60;
+            race.step(1 / 60, { throttle: input.current.throttle, steer: input.current.steer, drift: input.current.drift, pitch: input.current.pitch, useItem: pendingItem }); pendingItem = false; accumulator -= 1 / 60;
           }
         }
       } else { accumulator = 0; pendingItem = false; input.current.useItem = false; }
       if (race.started && player.finish === null && race.time - lastGhost >= .1) {
-        const p = player.body.position; recording.push({ t: race.time, x: p.x, y: p.y, z: p.z, yaw: player.yaw }); lastGhost = race.time;
+        const p = player.body.position; recording.push({ t: race.time, x: p.x, y: p.y, z: p.z, yaw: player.yaw, form: player.form, vehicle: player.vehicle }); lastGhost = race.time;
       }
       for (const event of race.events.splice(0)) {
         emit(event.position, event.color, event.type === 'finish' ? 80 : event.type === 'hit' ? 25 : 10, event.type === 'finish' ? 12 : 4);
@@ -97,32 +100,36 @@ export default function GameCanvas(props: Props) {
         if (event.type === 'hit' && close) shake = .6;
       }
       if (player.finish !== null && !finishedNotified) {
-        finishedNotified = true; recording.push({ t: player.finish, x: player.body.position.x, y: player.body.position.y, z: player.body.position.z, yaw: player.yaw });
+        finishedNotified = true; recording.push({ t: player.finish, x: player.body.position.x, y: player.body.position.y, z: player.body.position.z, yaw: player.yaw, form: player.form, vehicle: player.vehicle });
         latest.current.onFinish(race.snapshot(), recording); props.audio.play('finish');
       }
       race.racers.forEach((racer, i) => {
         const kart = karts[i], p = racer.body.position;
         kart.position.set(p.x, p.y - 1, p.z); kart.rotation.y = racer.yaw + (racer.stun > 0 ? Math.sin(racer.stun * 18) * 1.4 : 0);
         kart.traverse(part => { if (part.userData.wheel && !paused) part.rotateY(racer.speed * dt / .36); });
-        const road = track.roadSupport(kart.position, kart.position.y - 1, kart.position.y + 1) ?? nearestRoad(kart.position);
-        const pitch = racer.motion === 'grounded' ? Math.asin(THREE.MathUtils.clamp(-road.tangent.y, -.3, .3)) : racer.motion === 'rescuing' ? 0 : -Math.atan2(racer.body.velocity.y, Math.max(15, racer.speed));
+        const pitch = racer.motion === 'grounded' ? Math.asin(THREE.MathUtils.clamp(-racer.surfaceSlope, -.3, .3)) : racer.motion === 'rescuing' ? 0 : -Math.atan2(racer.body.velocity.y, Math.max(15, racer.speed));
         kart.rotation.order = 'YXZ'; kart.rotation.x += (THREE.MathUtils.clamp(pitch, -.55, .55) - kart.rotation.x) * (1 - Math.exp(-8 * dt));
-        kart.rotation.z = racer.drifting ? Math.sin(race.time * 20) * .03 : 0;
+        kart.getObjectByName('flight-wings')!.visible = racer.form==='plane';
+        kart.getObjectByName('hover-floats')!.visible = racer.form==='hover';
+        kart.getObjectByName('rush-shell')!.visible = racer.rush>0;
+        if(racer.form==='plane'&&!paused)kart.getObjectByName('propeller')!.rotateZ(dt*40);
+        kart.rotation.z = racer.form==='plane' ? -racer.steering*.55 : racer.vehicle==='bike' ? -racer.steering*.2 : racer.drifting ? Math.sin(race.time * 20) * .03 : 0;
         shields[i].position.set(p.x, p.y + .4, p.z); shields[i].visible = racer.shield > 0 || racer.motion === 'rescuing'; shields[i].rotation.y += dt;
         if (!paused && racer.boost > 0) emit(new THREE.Vector3(p.x - Math.sin(racer.yaw) * 1.7, p.y, p.z - Math.cos(racer.yaw) * 1.7), '#ffd080', 2);
         if (!paused && racer.drifting) for (const side of [-1, 1]) emit(new THREE.Vector3(p.x + Math.cos(racer.yaw) * side, p.y - .5, p.z - Math.sin(racer.yaw) * side), racer.drift > .65 ? '#ffbc73' : '#8feeff', 1);
       });
       if (!paused) scenery.update(dt);
-      scenery.boxes.forEach((box, i) => { box.visible = race.boxes[i].cooldown <= 0; box.rotation.y = now / 850 + i; box.rotation.z = .2; box.position.y = race.boxes[i].position.y + 2 + Math.sin(now / 500 + i) * .35; });
+      adventureScene.update(race.time,player.lapTimes.length);
+      scenery.boxes.forEach((box, i) => { box.visible = race.boxes[i].cooldown <= 0; box.rotation.y = now / 850 + i; box.rotation.z = .2; box.position.y = (inSection(race.boxes[i].progress, ADVENTURES[track.id].flight) ? flightHeight(track,race.boxes[i].progress) : race.boxes[i].position.y + 2) + Math.sin(now / 500 + i) * .35; });
       scenery.balloons.forEach((balloon, i) => { balloon.rotation.z = Math.sin(now / 2500 + i) * .045; });
       const activeIds = new Set(race.projectiles.map(p => p.id));
       for (const [id, m] of projectileMeshes) if (!activeIds.has(id)) { scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose(); projectileMeshes.delete(id); }
       for (const projectile of race.projectiles) {
         let m = projectileMeshes.get(projectile.id);
-        if (!m) { m = new THREE.Mesh(projectile.type === 'trap' ? new THREE.SphereGeometry(1.7, 12, 6) : new THREE.ConeGeometry(.6, 2.5, 8), new THREE.MeshStandardMaterial({ color: projectile.type === 'trap' ? '#c084e3' : '#ff967c', emissive: projectile.type === 'trap' ? '#7c409a' : '#ff5436', emissiveIntensity: .5 })); scene.add(m); projectileMeshes.set(projectile.id, m); }
+        if (!m) { m = new THREE.Mesh(projectile.type === 'decoy' ? new THREE.BoxGeometry(1.7,1.7,1.7) : projectile.type === 'trap' ? new THREE.SphereGeometry(1.7, 12, 6) : new THREE.ConeGeometry(.6, 2.5, 8), new THREE.MeshStandardMaterial({ color: projectile.type === 'decoy' ? '#e895d4' : projectile.type === 'trap' ? '#c084e3' : '#ff967c', emissive: projectile.type === 'trap' ? '#7c409a' : '#ff5436', emissiveIntensity: .5 })); scene.add(m); projectileMeshes.set(projectile.id, m); }
         m.position.copy(projectile.position);
         if (projectile.type === 'trap') { m.position.y -= .7; m.scale.y = .2; }
-        else { m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), projectile.velocity.clone().normalize()); if (!paused) emit(projectile.position, '#ffd080', 1); }
+        else if(projectile.type==='rocket') { m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), projectile.velocity.clone().normalize()); if (!paused) emit(projectile.position, '#ffd080', 1); }
       }
       particles.forEach((p, i) => {
         if (!paused) { p.age += dt; p.position.addScaledVector(p.velocity, dt); p.velocity.y -= dt * 6; }
@@ -135,11 +142,13 @@ export default function GameCanvas(props: Props) {
         while (ghostIndex < ghost.length - 2 && ghost[ghostIndex + 1].t < race.time) ghostIndex++;
         const a = ghost[ghostIndex], b = ghost[ghostIndex + 1], f = THREE.MathUtils.clamp((race.time - a.t) / Math.max(.001, b.t - a.t), 0, 1);
         ghostKart.position.set(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f - 1, a.z + (b.z - a.z) * f);
+        ghostKart.getObjectByName('flight-wings')!.visible=a.form==='plane';
+        ghostKart.getObjectByName('hover-floats')!.visible=a.form==='hover';
         ghostKart.rotation.y = a.yaw + Math.atan2(Math.sin(b.yaw - a.yaw), Math.cos(b.yaw - a.yaw)) * f;
       }
       if (overview) {
-        const ratio = Math.max(1, 1.35 / camera.aspect); cameraTarget.set(145 * ratio, 175 * ratio, 205 * ratio); lookTarget.set(0, 5, 25);
-        (scene.fog as THREE.Fog).near = 220 * ratio; (scene.fog as THREE.Fog).far = 600 * ratio;
+        const ratio = Math.max(1, 1.35 / camera.aspect); cameraTarget.set(218 * ratio, 263 * ratio, 308 * ratio); lookTarget.set(0, 5, 25);
+        (scene.fog as THREE.Fog).near = 400 * ratio; (scene.fog as THREE.Fog).far = 1000 * ratio;
       } else {
         const p = player.body.position, distance = 10.5 + player.speed * .085;
         cameraTarget.set(p.x - Math.sin(player.yaw) * distance, player.motion === 'falling' ? Math.max(p.y + 6.3, player.departureHeight - 3) : p.y + 6.3, p.z - Math.cos(player.yaw) * distance);
@@ -163,10 +172,10 @@ export default function GameCanvas(props: Props) {
       scene.traverse(o => { if (o instanceof THREE.LineSegments || o instanceof THREE.Points) { o.geometry.dispose(); (o.material as THREE.Material).dispose(); } });
       scenery.background.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
     };
-  }, [props.courseId, props.color, props.difficulty, props.raceKey, props.running, input]);
+  }, [props.vehicle, props.courseId, props.color, props.difficulty, props.raceKey, props.running, input]);
   return <>
     <div className="game-canvas" ref={host} role="img" aria-label={`${COURSES[props.courseId].name} 3D kart race`} />
     {error && <div className="graphics-error" role="alert">{error}</div>}
-    {props.running && <div className="touch-controls">{[['ArrowLeft', '←'], ['ArrowRight', '→'], ['Space', 'DRIFT'], ['KeyE', 'ITEM'], ['ArrowDown', 'BRAKE'], ['ArrowUp', 'GO']].map(([code, label]) => <button key={code} aria-label={`Drive ${label}`} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(code, true); }} onPointerUp={() => setPressed(code, false)} onPointerCancel={() => setPressed(code, false)} onLostPointerCapture={() => setPressed(code, false)}>{label}</button>)}</div>}
+    {props.running && <div className="touch-controls">{[['ArrowLeft', '←'], ['ArrowRight', '→'], ['Space', 'DRIFT'], ['KeyE', 'ITEM'], ['KeyQ', 'CLIMB'], ['KeyF', 'DIVE'], ['ArrowDown', 'BRAKE'], ['ArrowUp', 'GO']].map(([code, label]) => <button key={code} aria-label={`Drive ${label}`} onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); setPressed(code, true); }} onPointerUp={() => setPressed(code, false)} onPointerCancel={() => setPressed(code, false)} onLostPointerCapture={() => setPressed(code, false)}>{label}</button>)}</div>}
   </>;
 }

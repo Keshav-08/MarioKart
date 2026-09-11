@@ -35,7 +35,7 @@ test('championship scores three rounds once, gives DNF zero and breaks ties cons
   const tied=cupStandings([first,scoreRound('neon',[...standings].reverse())]);
   assert.equal(tied[0].id,7,'equal points and wins resolved by final-round position');
 });
-test('records and ghosts stay isolated by course, preserving old Cloudburst saves',()=>{
+test('records and ghosts stay isolated by course, leaving pre-expansion saves intact',()=>{
   const data=new Map<string,string>(); const original=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>data.set(k,v)}});
   try {
@@ -47,8 +47,8 @@ test('records and ghosts stay isolated by course, preserving old Cloudburst save
     saveRace('Foundry best','easy',snapshot,ghost.map(f=>({...f,x:55})),'foundry');
     assert.equal(loadGhost('neon')[0].x,0); assert.equal(loadGhost('foundry')[0].x,55);
     data.set('apex.cloudburst.records.v1',JSON.stringify([{id:'legacy',name:'Old racer',time:99,position:1,difficulty:'easy',laps:[33,33,33]}]));
-    assert.equal(loadRecords('cloudburst')[0].courseId,'cloudburst'); assert.equal(loadRecords('neon')[0].time,100);
-    data.set('apex.neon.ghost.v1','invalid'); assert.deepEqual(loadGhost('neon'),[]);
+    assert.equal(loadRecords('cloudburst').length,0); assert.ok(data.has('apex.cloudburst.records.v1'));  assert.equal(loadRecords('neon')[0].time,100);
+    data.set('apex.neon.ghost.adventure-v2','invalid'); assert.deepEqual(loadGhost('neon'),[]);
     race.dispose();
   } finally { if(original) Object.defineProperty(globalThis,'localStorage',original); else Reflect.deleteProperty(globalThis,'localStorage'); }
 });

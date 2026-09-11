@@ -20,7 +20,7 @@ test('course is elevated, closed, and the shortcut is shorter than the bypass', 
 });
 test('inventory, shields, hits, boosts, traps and recovery have real effects', () => {
   const race = new Race('normal', 'Test', '#ff9900'), p = race.racers[0];
-  p.item = 'turbo'; race.useItem(p); assert.equal(p.item, null); assert.equal(p.boost, 3);
+  p.item = 'turbo'; race.useItem(p); assert.equal(p.item, null); assert.equal(p.boost, 1.5);
   p.item = 'shield'; race.useItem(p); race.hit(p); assert.equal(p.stun, 0); assert.equal(p.shield, 0);
   p.immunity = 0; race.hit(p); assert.ok(p.stun > 0); assert.equal(p.boost, 0);
   p.stun = 0; p.item = 'trap'; race.useItem(p); assert.equal(race.projectiles[0].type, 'trap');
@@ -29,7 +29,7 @@ test('inventory, shields, hits, boosts, traps and recovery have real effects', (
   race.started = true; for (let i = 0; i < 84; i++) race.step(1 / 60, idle);
   assert.ok(nearestRoad(new THREE.Vector3(...p.body.position.toArray())).distance < 4);
   assert.equal(p.gate, -1); assert.equal(p.finish, null);
-  assert.equal(Object.keys(ITEMS).length, 4); race.dispose();
+  assert.equal(Object.keys(ITEMS).length, 9); race.dispose();
 });
 test('standing still cannot complete a lap; item boxes have shared respawn timers', () => {
   const race = new Race('easy', 'Test', '#ff9900'); race.started = true;
@@ -85,14 +85,14 @@ test('support rejects roads above or below the kart; a descending kart lands on 
   assert.equal(r.motion, 'grounded'); assert.ok(Math.abs(r.body.position.y - position.y - 1) < .1);
   race.dispose();
 });
-test('jump pads launch a ballistic hop and land without rescue', () => {
+test('Glider Burst outside a flight section launches a ballistic hop and lands without rescue', () => {
   const race = new Race('easy', 'Test', '#ff9900'); race.started = true;
-  const r = race.racers[0], p = .34, at = pointAt(p);
-  r.body.position.set(at.x, at.y + 1, at.z); r.progress = p; r.previous = p; r.yaw = yawAt(p);
+  const r = race.racers[0], p = .1, at = pointAt(p);
+  r.body.position.set(at.x, at.y + 1, at.z); r.progress = p; r.previous = p; r.yaw = yawAt(p); r.item='lift'; race.useItem(r);
   race.step(1 / 60, idle); assert.equal(r.motion, 'airborne'); assert.ok(r.body.velocity.y > 0);
   let peak = r.body.position.y;
   for (let i = 0; i < 70; i++) { race.step(1 / 60, idle); peak = Math.max(peak, r.body.position.y); }
-  assert.ok(peak > at.y + 3); assert.equal(r.motion, 'grounded');
+  assert.ok(peak > at.y + 2.5); assert.equal(r.motion, 'grounded');
   assert.equal(race.events.filter(e => e.type === 'recover' && e.text).length, 0);
   race.dispose();
 });
